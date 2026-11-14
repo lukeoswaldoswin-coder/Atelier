@@ -29,6 +29,9 @@ const SMOKE_TIMEOUT_MS = 20_000
 const userDataOverride = process.env['ATELIER_USER_DATA_DIR']
 if (userDataOverride && userDataOverride.trim().length > 0) {
   app.setPath('userData', userDataOverride)
+} else {
+  // 安装版与开发版统一使用 %APPDATA%\atelier，避免 productName 改变数据目录
+  app.setPath('userData', join(app.getPath('appData'), 'atelier'))
 }
 
 app.setAppUserModelId('com.atelier.desktop')
@@ -128,6 +131,29 @@ if (!hasSingleInstanceLock) {
 
   void app.whenReady().then(() => {
     applySessionHardening()
+
+    // 只读数据目录诊断：不打开数据库，用于安装版默认路径验证
+    const dataInfoSmokeFile = process.env['ATELIER_DATAINFO_SMOKE_FILE']
+    if (dataInfoSmokeFile) {
+      writeFileSync(
+        dataInfoSmokeFile,
+        JSON.stringify(
+          {
+            name: app.getName(),
+            version: app.getVersion(),
+            packaged: app.isPackaged,
+            appData: app.getPath('appData'),
+            userData: app.getPath('userData'),
+            dbPath: getDatabaseFilePath()
+          },
+          null,
+          2
+        ),
+        'utf8'
+      )
+      app.quit()
+      return
+    }
 
     // 打包/开发环境原生模块诊断：只写结果文件，不打开窗口
     const probeSmokeFile = process.env['ATELIER_PROBE_SMOKE_FILE']
