@@ -28,7 +28,7 @@ import type {
   UpdateTaskInput
 } from './domain'
 import type { ScheduleApplyInput, ScheduleApplyOutput } from './scheduling'
-import type { BackupInfo, DataInfo, RestoreCandidate, RestoreOutcome } from './data'
+import type { BackupInfo, DataInfo, ExportResult, RestoreCandidate, RestoreOutcome } from './data'
 import type { AppInfo } from './contracts'
 
 /**
@@ -89,6 +89,10 @@ export interface AtelierApi {
     reveal(): Promise<boolean>
     pickRestore(): Promise<RestoreCandidate | null>
     restore(input: { token: string }): Promise<RestoreOutcome>
+  }
+
+  exportData: {
+    csv(): Promise<ExportResult | null>
   }
 
   time: {

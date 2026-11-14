@@ -222,6 +222,15 @@ if (!hasSingleInstanceLock) {
           if (result.canceled || result.filePaths.length === 0) return null
           return result.filePaths[0] ?? null
         },
+        pickExportDirectory: async () => {
+          const result = await dialog.showOpenDialog({
+            title: '选择数据导出位置',
+            defaultPath: app.getPath('documents'),
+            properties: ['openDirectory', 'createDirectory']
+          })
+          if (result.canceled || result.filePaths.length === 0) return null
+          return result.filePaths[0] ?? null
+        },
         revealPath: (path) => shell.showItemInFolder(path),
         openDirectory: (path) => {
           void shell.openPath(path)

@@ -3,6 +3,7 @@ import { IpcChannel } from './channels'
 import {
   backupInfoSchema,
   dataInfoSchema,
+  exportResultSchema,
   restoreCandidateSchema,
   restoreOutcomeSchema,
   restoreTokenInputSchema
@@ -196,6 +197,11 @@ export const ipcContracts = {
   [IpcChannel.backupRestore]: {
     input: restoreTokenInputSchema,
     output: restoreOutcomeSchema
+  },
+
+  [IpcChannel.exportCsv]: {
+    input: noInputSchema,
+    output: exportResultSchema.nullable()
   },
 
   [IpcChannel.timeStatus]: {

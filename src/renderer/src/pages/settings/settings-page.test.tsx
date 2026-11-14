@@ -47,7 +47,12 @@ function installApi(
       backup: {
         create: vi.fn(),
         list: vi.fn(async () => []),
-        reveal: vi.fn(async () => true)
+        reveal: vi.fn(async () => true),
+        pickRestore: vi.fn(async () => null),
+        restore: vi.fn()
+      },
+      exportData: {
+        csv: vi.fn(async () => null)
       }
     }
   })

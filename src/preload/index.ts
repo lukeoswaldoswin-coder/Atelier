@@ -60,6 +60,10 @@ const api: AtelierApi = {
     restore: (input) => ipcRenderer.invoke(IpcChannel.backupRestore, input)
   },
 
+  exportData: {
+    csv: () => ipcRenderer.invoke(IpcChannel.exportCsv)
+  },
+
   time: {
     status: () => ipcRenderer.invoke(IpcChannel.timeStatus),
     start: (input) => ipcRenderer.invoke(IpcChannel.timeStart, input),

@@ -159,6 +159,11 @@ export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
       return ipcContracts[IpcChannel.backupRestore].output.parse(data.restore(input.token))
     },
 
+    [IpcChannel.exportCsv]: async (payload) => {
+      ipcContracts[IpcChannel.exportCsv].input.parse(payload)
+      return ipcContracts[IpcChannel.exportCsv].output.parse(await data.exportCsv())
+    },
+
     [IpcChannel.dataInfo]: async (payload) => {
       ipcContracts[IpcChannel.dataInfo].input.parse(payload)
       return ipcContracts[IpcChannel.dataInfo].output.parse(data.info())

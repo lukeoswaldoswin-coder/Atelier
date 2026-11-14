@@ -38,6 +38,8 @@ export const IpcChannel = {
   backupPickRestore: 'backup:pick-restore',
   backupRestore: 'backup:restore',
 
+  exportCsv: 'export:csv',
+
   timeStatus: 'time:status',
   timeStart: 'time:start',
   timePause: 'time:pause',

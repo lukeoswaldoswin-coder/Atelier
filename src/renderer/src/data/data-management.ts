@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { BackupInfo, DataInfo, RestoreCandidate } from '@shared/data'
+import type { BackupInfo, DataInfo, ExportResult, RestoreCandidate } from '@shared/data'
 import { getAtelierApi } from '@/lib/ipc'
 import { formatIpcError } from '@/lib/ipc-error'
 
@@ -12,12 +12,15 @@ export interface DataManagementState {
   lastBackup: BackupInfo | null
   restoreCandidate: RestoreCandidate | null
   restoring: boolean
+  exportResult: ExportResult | null
+  exporting: boolean
   refresh: () => Promise<void>
   createBackup: () => Promise<void>
   reveal: () => Promise<void>
   pickRestore: () => Promise<void>
   confirmRestore: () => Promise<void>
   cancelRestore: () => void
+  exportCsv: () => Promise<void>
 }
 
 export function useDataManagement(): DataManagementState {
@@ -29,6 +32,8 @@ export function useDataManagement(): DataManagementState {
   const [lastBackup, setLastBackup] = useState<BackupInfo | null>(null)
   const [restoreCandidate, setRestoreCandidate] = useState<RestoreCandidate | null>(null)
   const [restoring, setRestoring] = useState(false)
+  const [exportResult, setExportResult] = useState<ExportResult | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -104,6 +109,23 @@ export function useDataManagement(): DataManagementState {
     setRestoreCandidate(null)
   }
 
+  async function exportCsv(): Promise<void> {
+    setExporting(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const result = await getAtelierApi().exportData.csv()
+      if (result) {
+        setExportResult(result)
+        setMessage(`已导出 ${result.totalRows} 行到：${result.folder}`)
+      }
+    } catch (caught) {
+      setError(formatIpcError(caught))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return {
     info,
     backups,
@@ -113,12 +135,15 @@ export function useDataManagement(): DataManagementState {
     lastBackup,
     restoreCandidate,
     restoring,
+    exportResult,
+    exporting,
     refresh,
     createBackup,
     reveal,
     pickRestore,
     confirmRestore,
-    cancelRestore
+    cancelRestore,
+    exportCsv
   }
 }
 

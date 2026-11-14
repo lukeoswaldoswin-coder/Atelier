@@ -36,14 +36,25 @@ function installApi(overrides: { create?: ReturnType<typeof vi.fn> } = {}) {
     schemaVersion: '005-time-entries'
   }))
   const restore = vi.fn(async () => ({ restarting: true, message: '恢复完成，应用即将重启' }))
+  const exportCsv = vi.fn(async () => ({
+    folder: 'C:\\Users\\test\\Documents\\Atelier-export-20261114-120000',
+    files: [
+      { name: 'clients.csv', rows: 1 },
+      { name: 'commissions.csv', rows: 1 },
+      { name: 'tasks.csv', rows: 2 },
+      { name: 'time_entries.csv', rows: 3 }
+    ],
+    totalRows: 7
+  }))
   Object.defineProperty(window, 'atelier', {
     configurable: true,
     value: {
       data: { info: vi.fn(async () => INFO) },
-      backup: { create, list, reveal, pickRestore, restore }
+      backup: { create, list, reveal, pickRestore, restore },
+      exportData: { csv: exportCsv }
     }
   })
-  return { create, list, reveal, pickRestore, restore }
+  return { create, list, reveal, pickRestore, restore, exportCsv }
 }
 
 afterEach(() => {
@@ -134,5 +145,18 @@ describe('设置页：数据备份', () => {
 
     expect(restore).not.toHaveBeenCalled()
     expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument()
+  })
+
+  it('导出 CSV 显示行数与目录', async () => {
+    const { exportCsv } = installApi()
+    const user = userEvent.setup()
+    render(<DataManagementCard />)
+
+    await screen.findByTestId('data-db-path')
+    await user.click(screen.getByRole('button', { name: '导出 CSV' }))
+
+    await waitFor(() => expect(exportCsv).toHaveBeenCalledTimes(1))
+    expect(await screen.findByTestId('export-result')).toHaveTextContent('7 行')
+    expect(screen.getByTestId('export-result')).toHaveTextContent('Atelier-export-20261114-120000')
   })
 })

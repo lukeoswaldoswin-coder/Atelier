@@ -41,6 +41,15 @@ export function DataManagementCard() {
           <Button type="button" variant="outline" size="sm" disabled={data.busy} onClick={() => void data.pickRestore()}>
             从备份恢复
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={data.exporting}
+            onClick={() => void data.exportCsv()}
+          >
+            {data.exporting ? '导出中…' : '导出 CSV'}
+          </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => void data.reveal()}>
             打开备份文件夹
           </Button>
@@ -61,6 +70,12 @@ export function DataManagementCard() {
         {data.lastBackup ? (
           <p className="break-all text-[10px] text-muted-foreground" data-testid="last-backup">
             最近备份：{data.lastBackup.fileName}（{formatBytes(data.lastBackup.sizeBytes)}）
+          </p>
+        ) : null}
+
+        {data.exportResult ? (
+          <p className="break-all text-[10px] text-muted-foreground" data-testid="export-result">
+            CSV：{data.exportResult.totalRows} 行 · {data.exportResult.folder}
           </p>
         ) : null}
 
