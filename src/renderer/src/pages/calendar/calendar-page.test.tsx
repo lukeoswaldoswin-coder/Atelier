@@ -174,6 +174,41 @@ describe('日历页：周视图与未安排', () => {
     await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument())
   })
 
+  it('周视图在对应日期显示任务与截止，时刻型截止带创建时区时间', async () => {
+    const item = taskItem('44444444-4444-4444-8444-444444444444', '周任务', '2026-03-11')
+    const deadline: CalendarDeadline = {
+      commission: {
+        ...COMMISSION,
+        deadline: { kind: 'datetime', at: '2026-03-10T10:00:00.000Z', timeZone: 'Asia/Shanghai' }
+      },
+      clientName: '三狼',
+      date: '2026-03-10',
+      deadline: { kind: 'datetime', at: '2026-03-10T10:00:00.000Z', timeZone: 'Asia/Shanghai' }
+    }
+    installApi(
+      vi.fn(async () => payload({ scheduled: [item], deadlines: [deadline], unscheduled: [] }))
+    )
+    const user = userEvent.setup()
+    renderCalendar()
+
+    await user.click(screen.getByRole('radio', { name: '周' }))
+    await waitFor(() => expect(screen.getAllByTestId('calendar-week-column')).toHaveLength(7))
+
+    const column = (date: string) =>
+      screen
+        .getAllByTestId('calendar-week-column')
+        .find((element) => element.getAttribute('data-date') === date) as HTMLElement
+
+    await waitFor(() =>
+      expect(within(column('2026-03-11')).queryByTestId('calendar-task')).not.toBeNull()
+    )
+    expect(within(column('2026-03-11')).getByTestId('calendar-task')).toHaveTextContent('周任务')
+
+    const deadlineColumn = column('2026-03-10')
+    expect(within(deadlineColumn).getByTestId('calendar-deadline')).toHaveTextContent('18:00')
+    expect(within(deadlineColumn).queryByTestId('calendar-task')).toBeNull()
+  })
+
   it('空数据时显示零计数与空状态', async () => {
     installApi(vi.fn(async () => EMPTY_CALENDAR))
     renderCalendar()
