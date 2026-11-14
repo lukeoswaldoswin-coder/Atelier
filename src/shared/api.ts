@@ -1,11 +1,41 @@
+import type {
+  ByIdInput,
+  Client,
+  Commission,
+  CreateClientInput,
+  CreateCommissionInput,
+  ListClientsInput,
+  ListCommissionsInput,
+  UpdateClientInput,
+  UpdateCommissionInput
+} from './domain'
 import type { AppInfo } from './contracts'
 
 /**
  * 渲染进程可见的全部原生能力。
  * 这是 preload 通过 contextBridge 暴露、渲染进程通过 window.atelier 访问的唯一入口，
  * 新增能力必须先在这里声明，再到主进程注册同名通道。
+ *
+ * 注意：这里没有任何数据库对象。渲染进程始终通过 IPC 请求主进程读写，
+ * 数据库连接只存在于主进程。
  */
 export interface AtelierApi {
   /** 读取应用与运行时版本信息（主进程提供，渲染进程无法伪造）。 */
   getAppInfo(): Promise<AppInfo>
+
+  clients: {
+    create(input: CreateClientInput): Promise<Client>
+    list(input?: Partial<ListClientsInput>): Promise<Client[]>
+    get(input: ByIdInput): Promise<Client | null>
+    update(input: UpdateClientInput): Promise<Client | null>
+    archive(input: ByIdInput): Promise<Client | null>
+  }
+
+  commissions: {
+    create(input: CreateCommissionInput): Promise<Commission>
+    list(input?: Partial<ListCommissionsInput>): Promise<Commission[]>
+    get(input: ByIdInput): Promise<Commission | null>
+    update(input: UpdateCommissionInput): Promise<Commission | null>
+    archive(input: ByIdInput): Promise<Commission | null>
+  }
 }

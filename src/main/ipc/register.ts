@@ -1,5 +1,6 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 import type { IpcChannelName } from '@shared/channels'
+import { DataError } from '@shared/errors'
 import type { IpcHandler } from './handlers'
 
 export interface RegisterIpcOptions {
@@ -11,8 +12,8 @@ export interface RegisterIpcOptions {
 /**
  * 把处理器注册到 ipcMain。
  * - 每个通道先做来源校验，拒绝非本应用页面的调用；
- * - 处理器抛错时记录完整错误到主进程日志，只把稳定的错误信息回给渲染进程，
- *   避免把内部堆栈一路传到界面。
+ * - 业务错误（DataError）回传可读信息，让界面能提示“客户不存在”这类问题；
+ * - 其他异常只在主进程记录完整信息，对外统一返回稳定错误，避免泄露内部细节。
  */
 export function registerIpcHandlers(
   ipc: Pick<IpcMain, 'handle'>,
@@ -36,6 +37,9 @@ export function registerIpcHandlers(
         return await handler(payload)
       } catch (error) {
         logger(`[ipc] handler failed for ${channel}: ${String(error)}`)
+        if (error instanceof DataError) {
+          throw new Error(error.message)
+        }
         throw new Error(`IPC handler failed for ${channel}`)
       }
     })

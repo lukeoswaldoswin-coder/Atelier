@@ -1,5 +1,7 @@
-import { app, BrowserWindow, ipcMain, session } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, session } from 'electron'
+import { join } from 'node:path'
 import { buildAppInfo } from './app-info'
+import { createDatabaseService, type DatabaseService } from './db/service'
 import { createIpcHandlers } from './ipc/handlers'
 import { registerIpcHandlers } from './ipc/register'
 import { createSenderGuard, getRendererAllowedEntries } from './security'
@@ -9,7 +11,24 @@ import { createMainWindow } from './window'
 const isSmokeTest = process.env['ATELIER_SMOKE_TEST'] === '1'
 const SMOKE_TIMEOUT_MS = 20_000
 
+/**
+ * 允许通过环境变量指定数据目录（自动化测试、便携模式使用）。
+ * 必须在 app ready 之前设置，否则 Electron 已经按默认路径初始化完毕。
+ * 正常双击启动时该变量不存在，数据仍保存在默认的用户数据目录。
+ */
+const userDataOverride = process.env['ATELIER_USER_DATA_DIR']
+if (userDataOverride && userDataOverride.trim().length > 0) {
+  app.setPath('userData', userDataOverride)
+}
+
 app.setAppUserModelId('com.atelier.desktop')
+
+/** 数据库只存在于主进程，渲染进程没有任何直接访问入口。 */
+let database: DatabaseService | null = null
+
+function getDatabaseFilePath(): string {
+  return join(app.getPath('userData'), 'atelier.db')
+}
 
 function getAppInfo() {
   return buildAppInfo({
@@ -33,10 +52,16 @@ function applySessionHardening(): void {
   defaultSession.setPermissionCheckHandler(() => false)
 }
 
+function finishSmoke(exitCode: number): void {
+  process.exitCode = exitCode
+  // 使用 quit 而不是 exit，确保 will-quit 中的数据库关闭逻辑被执行。
+  app.quit()
+}
+
 function runSmokeCheck(win: BrowserWindow): void {
   const timeout = setTimeout(() => {
     console.error('SMOKE_FAIL timeout: 页面在限定时间内没有加载完成')
-    app.exit(1)
+    finishSmoke(1)
   }, SMOKE_TIMEOUT_MS)
   timeout.unref()
 
@@ -44,7 +69,7 @@ function runSmokeCheck(win: BrowserWindow): void {
     setTimeout(() => {
       clearTimeout(timeout)
       console.log('SMOKE_OK')
-      app.exit(0)
+      finishSmoke(0)
     }, 500)
   })
 
@@ -52,13 +77,13 @@ function runSmokeCheck(win: BrowserWindow): void {
     if (!isMainFrame) return
     clearTimeout(timeout)
     console.error(`SMOKE_FAIL did-fail-load ${errorCode} ${errorDescription}`)
-    app.exit(1)
+    finishSmoke(1)
   })
 
   win.webContents.once('render-process-gone', (_event, details) => {
     clearTimeout(timeout)
     console.error(`SMOKE_FAIL render-process-gone ${details.reason}`)
-    app.exit(1)
+    finishSmoke(1)
   })
 }
 
@@ -78,9 +103,31 @@ if (!hasSingleInstanceLock) {
   void app.whenReady().then(() => {
     applySessionHardening()
 
-    registerIpcHandlers(ipcMain, createIpcHandlers({ getAppInfo }), {
-      isAllowedSender: createSenderGuard(getRendererAllowedEntries())
-    })
+    try {
+      database = createDatabaseService(getDatabaseFilePath())
+      console.log(`[atelier] 数据库文件: ${database.filePath}`)
+      console.log(
+        `[atelier] 数据库迁移: 本次应用 ${database.migration.applied.length} 个，已存在 ${database.migration.previouslyApplied.length} 个`
+      )
+    } catch (error) {
+      console.error('[atelier] 数据库初始化失败:', error)
+      dialog.showErrorBox(
+        'Atelier 启动失败',
+        `无法打开本地数据库：\n${database === null ? getDatabaseFilePath() : ''}\n\n${String(error)}`
+      )
+      app.quit()
+      return
+    }
+
+    registerIpcHandlers(
+      ipcMain,
+      createIpcHandlers({
+        getAppInfo,
+        clients: database.clients,
+        commissions: database.commissions
+      }),
+      { isAllowedSender: createSenderGuard(getRendererAllowedEntries()) }
+    )
 
     const win = createMainWindow()
     if (isSmokeTest) runSmokeCheck(win)
@@ -88,6 +135,11 @@ if (!hasSingleInstanceLock) {
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
     })
+  })
+
+  app.on('will-quit', () => {
+    database?.close()
+    database = null
   })
 
   app.on('window-all-closed', () => {

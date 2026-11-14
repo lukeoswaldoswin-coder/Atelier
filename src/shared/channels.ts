@@ -3,7 +3,19 @@
  * 主进程注册、preload 调用、测试断言都从这里取值，避免字符串写错或通道名重复。
  */
 export const IpcChannel = {
-  appGetInfo: 'app:get-info'
+  appGetInfo: 'app:get-info',
+
+  clientsCreate: 'clients:create',
+  clientsList: 'clients:list',
+  clientsGet: 'clients:get',
+  clientsUpdate: 'clients:update',
+  clientsArchive: 'clients:archive',
+
+  commissionsCreate: 'commissions:create',
+  commissionsList: 'commissions:list',
+  commissionsGet: 'commissions:get',
+  commissionsUpdate: 'commissions:update',
+  commissionsArchive: 'commissions:archive'
 } as const
 
 export type IpcChannelName = (typeof IpcChannel)[keyof typeof IpcChannel]
