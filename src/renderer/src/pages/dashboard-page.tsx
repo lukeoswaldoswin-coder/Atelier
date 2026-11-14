@@ -126,6 +126,11 @@ export function DashboardPage() {
           ) : (
             <p className="text-sm text-muted-foreground">没有正在进行的计时</p>
           )}
+          {timeStatus?.notice ? (
+            <p role="status" className="mt-2 text-[11px] text-warning">
+              {timeStatus.notice}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
