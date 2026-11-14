@@ -24,17 +24,19 @@ const TONE_CLASS: Record<PaymentTone, string> = {
   success: 'text-success'
 }
 
-/** 列表行：委托名为主要信息，客户名为次要信息。点击进入编辑面板。 */
+/** 列表行：委托名为主要信息，客户名为次要信息。点击进入详情。 */
 export function CommissionRow({
   commission,
   clientsById,
   context,
-  onSelect
+  onSelect,
+  selected
 }: {
   commission: Commission
   clientsById: ReadonlyMap<string, Client>
   context: QueryContext
   onSelect: (commission: Commission) => void
+  selected: boolean
 }) {
   const overdue = isCommissionOverdue(commission, context)
   const payment = paymentPresentation(commission)
@@ -43,7 +45,13 @@ export function CommissionRow({
     <button
       type="button"
       onClick={() => onSelect(commission)}
-      className="grid w-full grid-cols-[minmax(0,1fr)_92px_128px_190px] items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
+      data-selected={selected ? 'true' : undefined}
+      aria-current={selected ? 'true' : undefined}
+      className={cn(
+        'grid w-full grid-cols-[minmax(0,1fr)_92px_128px_190px] items-center gap-3 px-4 py-2.5 text-left transition-colors',
+        'hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none',
+        selected && 'bg-accent/60'
+      )}
       data-testid="commission-row"
     >
       <span className="min-w-0">

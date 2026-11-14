@@ -17,14 +17,19 @@ export function CommissionEmptyState() {
   )
 }
 
-/** 有数据但被筛选条件全部过滤掉（筛选界面在 P1.2.5 接入，这里先如实区分两种情况）。 */
-export function CommissionNoResultsState() {
+/** 有数据但被筛选条件全部过滤掉。 */
+export function CommissionNoResultsState({ onClearFilters }: { onClearFilters: () => void }) {
   return (
-    <div className="flex min-h-[240px] flex-col items-center justify-center rounded-lg border border-dashed border-border/70 px-6 py-12 text-center">
-      <h2 className="text-sm font-medium">没有符合条件的委托</h2>
-      <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted-foreground">
-        试着调整筛选条件或搜索关键词。
-      </p>
+    <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border/70 px-6 py-12 text-center">
+      <div>
+        <h2 className="text-sm font-medium">没有符合条件的委托</h2>
+        <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted-foreground">
+          试着调整筛选条件或搜索关键词。
+        </p>
+      </div>
+      <Button variant="outline" size="sm" onClick={onClearFilters}>
+        清除筛选
+      </Button>
     </div>
   )
 }

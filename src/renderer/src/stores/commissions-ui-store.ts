@@ -8,6 +8,8 @@ interface CommissionsUiState {
   tab: CommissionsTab
   /** 当前选中的委托（详情面板，P1.2.4 接入） */
   selectedId: string | null
+  /** 键盘导航高亮行（不打开详情） */
+  activeId: string | null
   /** 查询条件：搜索、筛选、排序（界面在 P1.2.5 接入） */
   query: CommissionQuery
   /** 委托页签是否显示已归档（P1.2.4 接入） */
@@ -20,6 +22,7 @@ interface CommissionsUiState {
   clientsScrollTop: number
   setTab: (tab: CommissionsTab) => void
   setSelectedId: (id: string | null) => void
+  setActiveId: (id: string | null) => void
   setQuery: (patch: Partial<CommissionQuery>) => void
   setIncludeArchived: (value: boolean) => void
   setClientsIncludeArchived: (value: boolean) => void
@@ -35,6 +38,7 @@ interface CommissionsUiState {
 export const useCommissionsUiStore = create<CommissionsUiState>((set) => ({
   tab: 'commissions',
   selectedId: null,
+  activeId: null,
   query: DEFAULT_COMMISSION_QUERY,
   includeArchived: false,
   clientsIncludeArchived: false,
@@ -42,6 +46,7 @@ export const useCommissionsUiStore = create<CommissionsUiState>((set) => ({
   clientsScrollTop: 0,
   setTab: (tab) => set({ tab }),
   setSelectedId: (selectedId) => set({ selectedId }),
+  setActiveId: (activeId) => set({ activeId }),
   setQuery: (patch) => set((state) => ({ query: { ...state.query, ...patch } })),
   setIncludeArchived: (includeArchived) => set({ includeArchived }),
   setClientsIncludeArchived: (clientsIncludeArchived) => set({ clientsIncludeArchived }),

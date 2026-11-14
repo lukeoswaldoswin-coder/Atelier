@@ -69,19 +69,41 @@ function deadlineSortValue(commission: Commission): number {
   return Number.POSITIVE_INFINITY
 }
 
+/** 创建时间倒序；完全相同时用 id 兜底，保证顺序确定。 */
+function compareByCreatedDesc(a: Commission, b: Commission): number {
+  const byCreatedAt = b.createdAt.localeCompare(a.createdAt)
+  return byCreatedAt !== 0 ? byCreatedAt : a.id.localeCompare(b.id)
+}
+
 function compareBySort(a: Commission, b: Commission, sort: CommissionSort): number {
   switch (sort) {
     case 'created-desc':
-      return b.createdAt.localeCompare(a.createdAt)
+      return compareByCreatedDesc(a, b)
     case 'deadline-asc': {
       const diff = deadlineSortValue(a) - deadlineSortValue(b)
-      return diff !== 0 ? diff : b.createdAt.localeCompare(a.createdAt)
+      return diff !== 0 ? diff : compareByCreatedDesc(a, b)
     }
     case 'priority-asc': {
       const diff = a.priority - b.priority
-      return diff !== 0 ? diff : b.createdAt.localeCompare(a.createdAt)
+      return diff !== 0 ? diff : compareByCreatedDesc(a, b)
     }
   }
+}
+
+/** 是否设置了会减少结果数量的筛选条件（排序不算）。 */
+export function hasActiveCommissionFilters(query: CommissionQuery): boolean {
+  return (
+    query.text.trim().length > 0 ||
+    query.status !== 'all' ||
+    query.payment !== 'all' ||
+    query.clientId !== 'all' ||
+    query.overdueOnly
+  )
+}
+
+/** 查询是否被改动过（包含排序），用于「清除」按钮的可用状态。 */
+export function isCommissionQueryModified(query: CommissionQuery): boolean {
+  return hasActiveCommissionFilters(query) || query.sort !== DEFAULT_COMMISSION_QUERY.sort
 }
 
 /**

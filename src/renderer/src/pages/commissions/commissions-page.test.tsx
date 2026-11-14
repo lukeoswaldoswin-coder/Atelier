@@ -68,11 +68,12 @@ describe('委托列表页', () => {
     render(<CommissionsPage />)
 
     expect(await screen.findByText('半身立绘')).toBeInTheDocument()
-    expect(screen.getByText('小夏')).toBeInTheDocument()
-    expect(screen.getByText('进行中')).toBeInTheDocument()
-    expect(screen.getByText('2026-12-31')).toBeInTheDocument()
-    expect(screen.getByText('部分付款')).toBeInTheDocument()
-    expect(screen.getByText('已收 ¥400.00 · 未收 ¥800.00')).toBeInTheDocument()
+    const row = screen.getByTestId('commission-row')
+    expect(within(row).getByText('小夏')).toBeInTheDocument()
+    expect(within(row).getByText('进行中')).toBeInTheDocument()
+    expect(within(row).getByText('2026-12-31')).toBeInTheDocument()
+    expect(within(row).getByText('部分付款')).toBeInTheDocument()
+    expect(within(row).getByText('已收 ¥400.00 · 未收 ¥800.00')).toBeInTheDocument()
     expect(screen.getByTestId('commissions-summary')).toHaveTextContent('共 1 个委托 · 1 个未结清')
   })
 

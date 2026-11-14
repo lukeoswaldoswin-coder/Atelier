@@ -3,6 +3,8 @@ import type { Client } from '@shared/domain'
 import {
   DEFAULT_COMMISSION_QUERY,
   applyCommissionQuery,
+  hasActiveCommissionFilters,
+  isCommissionQueryModified,
   isCommissionOverdue,
   type CommissionQuery,
   type QueryContext
@@ -254,5 +256,89 @@ describe('委托查询：组合条件', () => {
       context
     )
     expect(result.map((row) => row.title)).toEqual(['小夏头像'])
+  })
+})
+
+describe('委托查询：排序稳定性', () => {
+  const contextFixed = { nowMs: Date.parse('2026-12-31T10:00:00.000Z'), todayISO: '2026-12-31' }
+
+  function row(overrides = {}) {
+    return makeCommission({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      title: 'x',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      deadline: { kind: 'none' },
+      priority: 3,
+      ...overrides
+    })
+  }
+
+  it('截止时间相同：按创建时间倒序，创建时间也相同则按 id 升序', () => {
+    const rows = [
+      row({ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', createdAt: '2026-01-01T00:00:00.000Z', deadline: { kind: 'date', date: '2026-12-31' } }),
+      row({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', createdAt: '2026-01-01T00:00:00.000Z', deadline: { kind: 'date', date: '2026-12-31' } }),
+      row({ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', createdAt: '2026-02-01T00:00:00.000Z', deadline: { kind: 'date', date: '2026-12-31' } })
+    ]
+
+    const result = applyCommissionQuery(rows, clientsById, query({ sort: 'deadline-asc' }), contextFixed)
+    expect(result.map((r) => r.id)).toEqual([
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    ])
+  })
+
+  it('优先级相同：按创建时间倒序，再按 id 升序', () => {
+    const rows = [
+      row({ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', createdAt: '2026-01-01T00:00:00.000Z', priority: 2 }),
+      row({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', createdAt: '2026-01-01T00:00:00.000Z', priority: 2 }),
+      row({ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', createdAt: '2026-03-01T00:00:00.000Z', priority: 2 })
+    ]
+
+    const result = applyCommissionQuery(rows, clientsById, query({ sort: 'priority-asc' }), contextFixed)
+    expect(result.map((r) => r.id)).toEqual([
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    ])
+  })
+
+  it('无截止的委托始终排在最后', () => {
+    const rows = [
+      row({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', deadline: { kind: 'none' } }),
+      row({ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', deadline: { kind: 'date', date: '2026-12-31' } }),
+      row({ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', deadline: { kind: 'none' } })
+    ]
+
+    const result = applyCommissionQuery(rows, clientsById, query({ sort: 'deadline-asc' }), contextFixed)
+    expect(result[0]?.id).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
+  })
+
+  it('同样的输入连续两次得到完全相同的顺序', () => {
+    const rows = [
+      row({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
+      row({ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }),
+      row({ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' })
+    ]
+    const first = applyCommissionQuery(rows, clientsById, query({ sort: 'priority-asc' }), contextFixed)
+    const second = applyCommissionQuery(rows, clientsById, query({ sort: 'priority-asc' }), contextFixed)
+    expect(first.map((r) => r.id)).toEqual(second.map((r) => r.id))
+  })
+})
+
+describe('查询状态判断', () => {
+  it('识别是否设置了会减少结果的筛选', () => {
+    expect(hasActiveCommissionFilters(query())).toBe(false)
+    expect(hasActiveCommissionFilters(query({ text: 'x' }))).toBe(true)
+    expect(hasActiveCommissionFilters(query({ status: 'active' }))).toBe(true)
+    expect(hasActiveCommissionFilters(query({ payment: 'unsettled' }))).toBe(true)
+    expect(hasActiveCommissionFilters(query({ clientId: 'some-id' }))).toBe(true)
+    expect(hasActiveCommissionFilters(query({ overdueOnly: true }))).toBe(true)
+  })
+
+  it('排序不算筛选，但算“查询被改动”', () => {
+    expect(hasActiveCommissionFilters(query({ sort: 'deadline-asc' }))).toBe(false)
+    expect(isCommissionQueryModified(query({ sort: 'deadline-asc' }))).toBe(true)
+    expect(isCommissionQueryModified(query())).toBe(false)
   })
 })
