@@ -55,7 +55,9 @@ const api: AtelierApi = {
   backup: {
     create: () => ipcRenderer.invoke(IpcChannel.backupCreate),
     list: () => ipcRenderer.invoke(IpcChannel.backupList),
-    reveal: () => ipcRenderer.invoke(IpcChannel.backupReveal)
+    reveal: () => ipcRenderer.invoke(IpcChannel.backupReveal),
+    pickRestore: () => ipcRenderer.invoke(IpcChannel.backupPickRestore),
+    restore: (input) => ipcRenderer.invoke(IpcChannel.backupRestore, input)
   },
 
   time: {

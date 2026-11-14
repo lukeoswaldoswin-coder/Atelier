@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { BackupInfo, DataInfo } from '@shared/data'
+import type { BackupInfo, DataInfo, RestoreCandidate } from '@shared/data'
 import { getAtelierApi } from '@/lib/ipc'
 import { formatIpcError } from '@/lib/ipc-error'
 
@@ -10,9 +10,14 @@ export interface DataManagementState {
   error: string | null
   message: string | null
   lastBackup: BackupInfo | null
+  restoreCandidate: RestoreCandidate | null
+  restoring: boolean
   refresh: () => Promise<void>
   createBackup: () => Promise<void>
   reveal: () => Promise<void>
+  pickRestore: () => Promise<void>
+  confirmRestore: () => Promise<void>
+  cancelRestore: () => void
 }
 
 export function useDataManagement(): DataManagementState {
@@ -22,6 +27,8 @@ export function useDataManagement(): DataManagementState {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [lastBackup, setLastBackup] = useState<BackupInfo | null>(null)
+  const [restoreCandidate, setRestoreCandidate] = useState<RestoreCandidate | null>(null)
+  const [restoring, setRestoring] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -65,6 +72,38 @@ export function useDataManagement(): DataManagementState {
     }
   }
 
+  async function pickRestore(): Promise<void> {
+    setError(null)
+    setMessage(null)
+    try {
+      const candidate = await getAtelierApi().backup.pickRestore()
+      if (candidate) setRestoreCandidate(candidate)
+    } catch (caught) {
+      setError(formatIpcError(caught))
+    }
+  }
+
+  async function confirmRestore(): Promise<void> {
+    if (!restoreCandidate) return
+    setRestoring(true)
+    setError(null)
+    try {
+      const outcome = await getAtelierApi().backup.restore({ token: restoreCandidate.token })
+      setRestoreCandidate(null)
+      setMessage(outcome.message)
+      if (!outcome.restarting) setError(outcome.message)
+    } catch (caught) {
+      setRestoreCandidate(null)
+      setError(formatIpcError(caught))
+    } finally {
+      setRestoring(false)
+    }
+  }
+
+  function cancelRestore(): void {
+    setRestoreCandidate(null)
+  }
+
   return {
     info,
     backups,
@@ -72,9 +111,14 @@ export function useDataManagement(): DataManagementState {
     error,
     message,
     lastBackup,
+    restoreCandidate,
+    restoring,
     refresh,
     createBackup,
-    reveal
+    reveal,
+    pickRestore,
+    confirmRestore,
+    cancelRestore
   }
 }
 

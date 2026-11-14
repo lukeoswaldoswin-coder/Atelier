@@ -2,7 +2,10 @@ import { z } from 'zod'
 import { IpcChannel } from './channels'
 import {
   backupInfoSchema,
-  dataInfoSchema
+  dataInfoSchema,
+  restoreCandidateSchema,
+  restoreOutcomeSchema,
+  restoreTokenInputSchema
 } from './data'
 import { scheduleApplyInputSchema, scheduleApplyOutputSchema } from './scheduling'
 import {
@@ -185,6 +188,14 @@ export const ipcContracts = {
   [IpcChannel.backupReveal]: {
     input: noInputSchema,
     output: z.boolean()
+  },
+  [IpcChannel.backupPickRestore]: {
+    input: noInputSchema,
+    output: restoreCandidateSchema.nullable()
+  },
+  [IpcChannel.backupRestore]: {
+    input: restoreTokenInputSchema,
+    output: restoreOutcomeSchema
   },
 
   [IpcChannel.timeStatus]: {

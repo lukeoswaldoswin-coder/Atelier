@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { BackupInfo, DataInfo } from '@shared/data'
 import { DataManagementCard } from './data-management-card'
@@ -28,14 +28,22 @@ function installApi(overrides: { create?: ReturnType<typeof vi.fn> } = {}) {
   const create = overrides.create ?? vi.fn(async () => BACKUP)
   const list = vi.fn(async () => [BACKUP])
   const reveal = vi.fn(async () => true)
+  const pickRestore = vi.fn(async () => ({
+    token: '11111111-1111-4111-8111-111111111111',
+    fileName: 'Atelier-backup-20261114-120000-000.db',
+    sizeBytes: 2048,
+    modifiedAt: '2026-11-14T12:00:00.000Z',
+    schemaVersion: '005-time-entries'
+  }))
+  const restore = vi.fn(async () => ({ restarting: true, message: '恢复完成，应用即将重启' }))
   Object.defineProperty(window, 'atelier', {
     configurable: true,
     value: {
       data: { info: vi.fn(async () => INFO) },
-      backup: { create, list, reveal }
+      backup: { create, list, reveal, pickRestore, restore }
     }
   })
-  return { create, list, reveal }
+  return { create, list, reveal, pickRestore, restore }
 }
 
 afterEach(() => {
@@ -92,5 +100,39 @@ describe('设置页：数据备份', () => {
     await screen.findByTestId('data-db-path')
     await user.click(screen.getByRole('button', { name: '打开备份文件夹' }))
     await waitFor(() => expect(reveal).toHaveBeenCalledTimes(1))
+  })
+
+  it('选择备份后先显示替换确认，确认后调用恢复', async () => {
+    const { pickRestore, restore } = installApi()
+    const user = userEvent.setup()
+    render(<DataManagementCard />)
+
+    await screen.findByTestId('data-db-path')
+    await user.click(screen.getByRole('button', { name: '从备份恢复' }))
+
+    const dialog = await screen.findByTestId('confirm-dialog')
+    expect(dialog).toHaveTextContent('用备份替换当前数据')
+    expect(dialog).toHaveTextContent('Atelier-backup-20261114-120000-000.db')
+    await user.click(within(dialog).getByRole('button', { name: '确认恢复' }))
+
+    await waitFor(() =>
+      expect(restore).toHaveBeenCalledWith({ token: '11111111-1111-4111-8111-111111111111' })
+    )
+    expect(pickRestore).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText('恢复完成，应用即将重启')).toBeInTheDocument()
+  })
+
+  it('取消恢复确认不会调用恢复', async () => {
+    const { restore } = installApi()
+    const user = userEvent.setup()
+    render(<DataManagementCard />)
+
+    await screen.findByTestId('data-db-path')
+    await user.click(screen.getByRole('button', { name: '从备份恢复' }))
+    const dialog = await screen.findByTestId('confirm-dialog')
+    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+
+    expect(restore).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument()
   })
 })

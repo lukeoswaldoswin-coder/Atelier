@@ -244,6 +244,35 @@ export function createActivityMonitor(deps: MonitorDeps) {
     timer = null
   }
 
+  /**
+   * 恢复数据库前的安全结算：停止采样，结束当前自动片段，确认没有 running 记录。
+   * 返回刚结算的记录；没有活动片段时返回 null。
+   */
+  function settleForRestore(): { entryId: string; seconds: number } | null {
+    if (timer) clearInterval(timer)
+    timer = null
+
+    const entryId = auto?.entryId ?? null
+    if (!entryId) {
+      if (deps.timeEntries.findActiveAuto()) {
+        throw new Error('存在无法识别的自动工时活动记录')
+      }
+      return null
+    }
+
+    closeAuto()
+
+    const entry = deps.timeEntries.get(entryId)
+    if (!entry || entry.status !== 'completed' || entry.endedAt === null) {
+      throw new Error('自动工时结算失败：记录未完整结束')
+    }
+    if (deps.timeEntries.findActiveAuto()) {
+      throw new Error('自动工时结算失败：仍有进行中的自动记录')
+    }
+
+    return { entryId, seconds: entry.elapsedSeconds }
+  }
+
   function handleSuspend(): void {
     closeAuto('系统休眠，已结算')
   }
@@ -256,6 +285,7 @@ export function createActivityMonitor(deps: MonitorDeps) {
   return {
     start,
     stop,
+    settleForRestore,
     tick,
     status,
     setEnabled,

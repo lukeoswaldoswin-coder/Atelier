@@ -7,6 +7,8 @@ import { buildAppInfo } from './app-info'
 import { createBackupService } from './data/backup-service'
 import { createDataController } from './data/controller'
 import { createDataPaths } from './data/data-paths'
+import { createRestoreService } from './data/restore-service'
+import { quarantineOrphanSidecars, recoverRestoreState } from './data/startup-recovery'
 import { createDatabaseService, type DatabaseService } from './db/service'
 import { getAppliedMigrations } from './db/migrator'
 import { createIpcHandlers } from './ipc/handlers'
@@ -38,6 +40,17 @@ let timeService: TimeService | null = null
 let timeTicker: ReturnType<typeof setInterval> | null = null
 let activityMonitor: ActivityMonitor | null = null
 let dataController: ReturnType<typeof createDataController> | null = null
+
+function startTimeTicker(): void {
+  if (timeTicker || !timeService) return
+  timeTicker = setInterval(() => timeService?.tick(), 1000)
+  timeTicker.unref?.()
+}
+
+function stopTimeTicker(): void {
+  if (timeTicker) clearInterval(timeTicker)
+  timeTicker = null
+}
 
 function getDatabaseFilePath(): string {
   return join(app.getPath('userData'), 'atelier.db')
@@ -146,6 +159,16 @@ if (!hasSingleInstanceLock) {
     }
 
     try {
+      const dataPaths = createDataPaths(app.getPath('userData'))
+      const recovery = recoverRestoreState(dataPaths)
+      if (recovery.status === 'fatal') {
+        dialog.showErrorBox('Atelier 数据恢复失败', recovery.message ?? '恢复现场无法安全处理')
+        app.quit()
+        return
+      }
+      if (recovery.message) console.warn(`[atelier] 启动恢复: ${recovery.message}`)
+      quarantineOrphanSidecars(dataPaths)
+
       database = createDatabaseService(getDatabaseFilePath())
       timeService = createTimeService(database.timeEntries)
       activityMonitor = createActivityMonitor({
@@ -154,10 +177,32 @@ if (!hasSingleInstanceLock) {
         timeService,
         createProbe: createWin32Probe
       })
-      const dataPaths = createDataPaths(app.getPath('userData'))
       const backups = createBackupService({
         paths: dataPaths,
         getDb: () => database?.db ?? null
+      })
+      const restore = createRestoreService({
+        paths: dataPaths,
+        getDb: () => database?.db ?? null,
+        timeService,
+        monitor: activityMonitor,
+        backups,
+        stopTimeTicker,
+        startTimeTicker,
+        closeDatabase: () => {
+          stopTimeTicker()
+          database?.close()
+          database = null
+          timeService = null
+        },
+        relaunch: () => {
+          app.relaunch()
+          app.exit(0)
+        },
+        fatal: (message) => {
+          dialog.showErrorBox('Atelier 数据恢复失败', message)
+          app.exit(1)
+        }
       })
       dataController = createDataController({
         paths: dataPaths,
@@ -167,6 +212,16 @@ if (!hasSingleInstanceLock) {
           return getAppliedMigrations(database.db).at(-1)?.id ?? null
         },
         backups,
+        restore,
+        pickRestoreFile: async () => {
+          const result = await dialog.showOpenDialog({
+            title: '选择 Atelier 数据库备份',
+            properties: ['openFile'],
+            filters: [{ name: 'Atelier 数据库备份', extensions: ['db'] }]
+          })
+          if (result.canceled || result.filePaths.length === 0) return null
+          return result.filePaths[0] ?? null
+        },
         revealPath: (path) => shell.showItemInFolder(path),
         openDirectory: (path) => {
           void shell.openPath(path)
@@ -201,8 +256,7 @@ if (!hasSingleInstanceLock) {
     )
 
     // 每秒检查一次计时（24 小时上限、30 秒检查点）
-    timeTicker = setInterval(() => timeService?.tick(), 1000)
-    timeTicker.unref?.()
+    startTimeTicker()
 
     // 自动监测按设置启动（默认关闭，不会加载原生探测）
     activityMonitor.start()

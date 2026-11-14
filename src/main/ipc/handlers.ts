@@ -149,6 +149,16 @@ export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
       return ipcContracts[IpcChannel.backupReveal].output.parse(data.revealBackup())
     },
 
+    [IpcChannel.backupPickRestore]: async (payload) => {
+      ipcContracts[IpcChannel.backupPickRestore].input.parse(payload)
+      return ipcContracts[IpcChannel.backupPickRestore].output.parse(await data.pickRestore())
+    },
+
+    [IpcChannel.backupRestore]: async (payload) => {
+      const input = ipcContracts[IpcChannel.backupRestore].input.parse(payload)
+      return ipcContracts[IpcChannel.backupRestore].output.parse(data.restore(input.token))
+    },
+
     [IpcChannel.dataInfo]: async (payload) => {
       ipcContracts[IpcChannel.dataInfo].input.parse(payload)
       return ipcContracts[IpcChannel.dataInfo].output.parse(data.info())

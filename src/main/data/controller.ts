@@ -1,14 +1,17 @@
 import { existsSync, statSync } from 'node:fs'
 import { basename } from 'node:path'
-import type { DataInfo } from '@shared/data'
+import type { DataInfo, RestoreCandidate, RestoreOutcome } from '@shared/data'
 import type { BackupService } from './backup-service'
 import type { DataPaths } from './data-paths'
+import type { RestoreService } from './restore-service'
 
 export interface DataControllerDeps {
   paths: DataPaths
   appVersion: string
   getSchemaVersion: () => string | null
   backups: BackupService
+  restore: RestoreService
+  pickRestoreFile: () => Promise<string | null>
   revealPath: (path: string) => void
   openDirectory: (path: string) => void
 }
@@ -49,6 +52,12 @@ export function createDataController(deps: DataControllerDeps) {
       deps.openDirectory(deps.paths.backupDir)
       return true
     },
+    pickRestore: async (): Promise<RestoreCandidate | null> => {
+      const path = await deps.pickRestoreFile()
+      if (!path) return null
+      return deps.restore.prepare(path)
+    },
+    restore: (token: string): RestoreOutcome => deps.restore.restore(token),
     getBackupFileName: (path: string) => basename(path)
   }
 }

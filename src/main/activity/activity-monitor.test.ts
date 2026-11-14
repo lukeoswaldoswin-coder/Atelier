@@ -203,6 +203,26 @@ describe('自动监测协调器', () => {
     expect(monitor.status().idleEnabled).toBe(false)
   })
 
+  it('恢复前结算会结束当前自动片段并确认没有 running 记录', () => {
+    probe.sampleValue = { processName: 'photoshop.exe', idleMs: 0 }
+    monitor.tick()
+    advance(45)
+
+    const settled = monitor.settleForRestore()
+
+    expect(settled).not.toBeNull()
+    expect(settled?.seconds).toBeGreaterThanOrEqual(40)
+    expect(repo.findActiveAuto()).toBeNull()
+    const entry = repo.get(settled!.entryId)
+    expect(entry?.status).toBe('completed')
+    expect(entry?.endedAt).not.toBeNull()
+  })
+
+  it('没有活动自动片段时恢复前结算返回 null', () => {
+    expect(monitor.settleForRestore()).toBeNull()
+    expect(repo.findActiveAuto()).toBeNull()
+  })
+
   it('超过 30 秒会写检查点', () => {
     probe.sampleValue = { processName: 'photoshop.exe', idleMs: 0 }
     monitor.tick()
