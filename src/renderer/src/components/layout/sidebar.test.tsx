@@ -34,16 +34,12 @@ describe('侧边栏', () => {
     expect(useNavigationStore.getState().active).toBe('calendar')
   })
 
-  it('未实现的页面标注所属阶段，已实现的不标注', () => {
+  it('已实现的页面不再标注阶段角标', () => {
     render(<Sidebar />)
 
-    const time = screen.getByRole('button', { name: /工时记录/ })
-    expect(time).toHaveTextContent('P4')
-
-    const dashboard = screen.getByRole('button', { name: /概览/ })
-    expect(dashboard).not.toHaveTextContent('P0')
-
-    const settings = screen.getByRole('button', { name: /设置/ })
-    expect(settings).not.toHaveTextContent('P4')
+    for (const item of navItems) {
+      const button = screen.getByRole('button', { name: new RegExp(item.label) })
+      expect(button).not.toHaveTextContent(item.phase)
+    }
   })
 })

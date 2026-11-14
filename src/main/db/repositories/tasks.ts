@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import {
   taskSchema,
+  type AssignableTask,
   type ByIdInput,
   type CalendarDeadline,
   type CalendarTask,
@@ -69,6 +70,8 @@ export interface TasksRepository {
   reorder(input: ReorderTasksInput): Task[]
   archive(input: ByIdInput): Task | null
   unarchive(input: ByIdInput): Task | null
+  /** 全部任务（含归档），用于工时归属选择 */
+  listAll(): AssignableTask[]
   /** 日历范围查询：已安排任务、未安排任务、范围内的委托截止。 */
   calendar(input: CalendarTasksInput): CalendarTasksOutput
 }
@@ -331,8 +334,7 @@ export function createTasksRepository(db: AppDatabase): TasksRepository {
     },
 
     reorder(input: ReorderTasksInput): Task[] {
-      return db.transaction((): Task[] => {
-        const currentIds = (
+      return db.transaction((): Task[] => {        const currentIds = (
           db
             .prepare(
               `SELECT id FROM tasks
@@ -403,6 +405,35 @@ export function createTasksRepository(db: AppDatabase): TasksRepository {
 
         return getById(input.id)
       })()
+    },
+
+    listAll(): AssignableTask[] {
+      const rows = db
+        .prepare(
+          `SELECT t.id, t.title, c.id AS commissionId, c.title AS commissionTitle,
+                  cl.name AS clientName, t.status, t.archived_at AS archivedAt
+             FROM tasks t
+             JOIN commissions c ON c.id = t.commission_id
+             LEFT JOIN clients cl ON cl.id = c.client_id
+            ORDER BY c.title COLLATE NOCASE, ${STAGE_CASE}, t.sort_order, t.id`
+        )
+        .all() as Array<Record<string, unknown>>
+
+      return rows.map((row) => ({
+        id: toText(row['id']),
+        title: toText(row['title']),
+        commissionId: toText(row['commissionId']),
+        commissionTitle: toText(row['commissionTitle']),
+        clientName:
+          row['clientName'] === null || row['clientName'] === undefined
+            ? '未知客户'
+            : toText(row['clientName']),
+        status: toText(row['status']) as TaskStatus,
+        archivedAt:
+          row['archivedAt'] === null || row['archivedAt'] === undefined
+            ? null
+            : toText(row['archivedAt'])
+      }))
     },
 
     calendar(input: CalendarTasksInput): CalendarTasksOutput {

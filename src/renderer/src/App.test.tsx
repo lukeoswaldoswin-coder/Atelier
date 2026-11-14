@@ -39,6 +39,19 @@ beforeEach(() => {
         get: vi.fn(),
         update: vi.fn(),
         archive: vi.fn()
+      },
+      tasks: {
+        listAll: vi.fn(async () => [])
+      },
+      time: {
+        status: vi.fn(async () => ({ manual: null, auto: null, notice: null })),
+        list: vi.fn(async () => []),
+        summary: vi.fn(async () => ({
+          totalSeconds: 0,
+          unassignedSeconds: 0,
+          byDay: [],
+          byTask: []
+        }))
       }
     }
   })
@@ -68,14 +81,15 @@ describe('应用外壳', () => {
     expect(await screen.findByText('还没有委托')).toBeInTheDocument()
   })
 
-  it('未实现的页面仍然如实提示所属阶段', async () => {
+  it('切换到工时记录时进入真实页面', async () => {
     const user = userEvent.setup()
     render(<App />)
     await screen.findByTestId('app-info')
 
     await user.click(screen.getByRole('button', { name: /工时记录/ }))
 
-    expect(screen.getByText('计划在 P4 阶段实现')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '工时记录', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByTestId('time-page')).toBeInTheDocument()
   })
 
   it('主题切换会更新根元素与按钮文案', async () => {

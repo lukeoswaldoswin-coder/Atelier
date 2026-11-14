@@ -36,7 +36,8 @@ const api: AtelierApi = {
     update: (input) => ipcRenderer.invoke(IpcChannel.tasksUpdate, input),
     reorder: (input) => ipcRenderer.invoke(IpcChannel.tasksReorder, input),
     archive: (input: ByIdInput) => ipcRenderer.invoke(IpcChannel.tasksArchive, input),
-    unarchive: (input: ByIdInput) => ipcRenderer.invoke(IpcChannel.tasksUnarchive, input)
+    unarchive: (input: ByIdInput) => ipcRenderer.invoke(IpcChannel.tasksUnarchive, input),
+    listAll: () => ipcRenderer.invoke(IpcChannel.tasksListAll)
   },
 
   calendar: {

@@ -25,6 +25,7 @@ export const IpcChannel = {
   tasksReorder: 'tasks:reorder',
   tasksArchive: 'tasks:archive',
   tasksUnarchive: 'tasks:unarchive',
+  tasksListAll: 'tasks:list-all',
 
   calendarTasks: 'calendar:tasks',
 

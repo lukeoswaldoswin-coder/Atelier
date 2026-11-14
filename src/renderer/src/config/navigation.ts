@@ -70,10 +70,10 @@ export const navGroups: readonly NavGroup[] = [
       {
         id: 'time',
         label: '工时记录',
-        description: '计时、暂停、手动补录，以及预计工时与实际工时的对比。',
+        description: '计时、手动补录，以及预计工时与实际工时的对比。',
         icon: Timer,
         phase: 'P4',
-        implemented: false
+        implemented: true
       }
     ]
   },

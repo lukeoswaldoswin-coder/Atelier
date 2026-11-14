@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { IpcChannel } from './channels'
 import {
+  assignableTaskSchema,
   byIdInputSchema,
   calendarTasksInputSchema,
   calendarTasksOutputSchema,
@@ -147,6 +148,10 @@ export const ipcContracts = {
   [IpcChannel.tasksUnarchive]: {
     input: byIdInputSchema,
     output: taskSchema.nullable()
+  },
+  [IpcChannel.tasksListAll]: {
+    input: noInputSchema,
+    output: z.array(assignableTaskSchema)
   },
 
   [IpcChannel.calendarTasks]: {

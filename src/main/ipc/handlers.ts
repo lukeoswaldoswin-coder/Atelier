@@ -125,6 +125,11 @@ export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
       return ipcContracts[IpcChannel.tasksUnarchive].output.parse(tasks.unarchive(input))
     },
 
+    [IpcChannel.tasksListAll]: async (payload) => {
+      ipcContracts[IpcChannel.tasksListAll].input.parse(payload)
+      return ipcContracts[IpcChannel.tasksListAll].output.parse(tasks.listAll())
+    },
+
     [IpcChannel.calendarTasks]: async (payload) => {
       const input = ipcContracts[IpcChannel.calendarTasks].input.parse(payload)
       return ipcContracts[IpcChannel.calendarTasks].output.parse(tasks.calendar(input))

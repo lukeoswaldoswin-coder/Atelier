@@ -449,6 +449,18 @@ export const timeTaskTotalsOutputSchema = z.array(
 )
 export type TimeTaskTotalsOutput = z.infer<typeof timeTaskTotalsOutputSchema>
 
+/** 工时归属选择用的任务摘要（含委托与客户） */
+export const assignableTaskSchema = z.object({
+  id: uuidSchema,
+  title: z.string().min(1),
+  commissionId: uuidSchema,
+  commissionTitle: z.string().min(1),
+  clientName: z.string().min(1),
+  status: taskStatusSchema,
+  archivedAt: utcIsoSchema.nullable()
+})
+export type AssignableTask = z.infer<typeof assignableTaskSchema>
+
 export const monitorStatusOutputSchema = z.object({
   platformSupported: z.boolean(),
   enabled: z.boolean(),

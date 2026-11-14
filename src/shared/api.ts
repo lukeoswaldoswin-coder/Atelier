@@ -1,4 +1,5 @@
 import type {
+  AssignableTask,
   ByIdInput,
   CalendarTasksInput,
   CalendarTasksOutput,
@@ -65,6 +66,7 @@ export interface AtelierApi {
     reorder(input: ReorderTasksInput): Promise<Task[]>
     archive(input: ByIdInput): Promise<Task | null>
     unarchive(input: ByIdInput): Promise<Task | null>
+    listAll(): Promise<AssignableTask[]>
   }
 
   calendar: {
