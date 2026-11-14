@@ -61,6 +61,9 @@ export function CommissionRow({
         </span>
         <span className="block truncate text-xs text-muted-foreground">
           {clientNameOf(commission, clientsById)}
+          {commission.taskCount > 0
+            ? ` · 任务 ${commission.doneTaskCount}/${commission.taskCount}`
+            : ''}
         </span>
       </span>
 

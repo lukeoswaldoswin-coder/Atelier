@@ -210,6 +210,30 @@ describe('委托列表页', () => {
     expect(within(select).queryByRole('option', { name: '已归档客户' })).not.toBeInTheDocument()
   })
 
+  it('列表行显示任务进度，没有任务时不显示', async () => {
+    const client = makeClient({ name: '小夏' })
+    const withTasks = makeCommission({
+      title: '有进度',
+      clientId: client.id,
+      taskCount: 2,
+      doneTaskCount: 1
+    })
+    const withoutTasks = makeCommission({
+      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      title: '无进度',
+      clientId: client.id,
+      taskCount: 0,
+      doneTaskCount: 0
+    })
+    installApi(vi.fn(async () => [withTasks, withoutTasks]), vi.fn(async () => [client]))
+
+    render(<CommissionsPage />)
+
+    const rows = await screen.findAllByTestId('commission-row')
+    expect(rows[0]).toHaveTextContent('任务 1/2')
+    expect(rows[1]).not.toHaveTextContent('· 任务')
+  })
+
   it('点击委托行打开详情，编辑保存后详情即时更新', async () => {
     const client = makeClient({ name: '小夏' })
     let current = makeCommission({
