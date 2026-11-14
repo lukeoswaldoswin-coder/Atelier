@@ -141,6 +141,11 @@ export function CommissionsTab() {
     searchInputRef.current?.focus()
   }, [])
 
+  const clearSearch = useCallback(() => {
+    if (query.text.length === 0) return
+    setQuery({ text: '' })
+  }, [query.text, setQuery])
+
   const openDetail = useCallback(
     (id: string) => {
       setActiveId(id)
@@ -157,7 +162,8 @@ export function CommissionsTab() {
     activeId,
     onActivate: setActiveId,
     onOpen: openDetail,
-    onFocusSearch: focusSearch
+    onFocusSearch: focusSearch,
+    onEscape: clearSearch
   })
 
   const scopeTotal = commissions.rows.length

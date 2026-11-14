@@ -25,23 +25,30 @@ interface CommissionKeyboardOptions {
   onActivate: (id: string) => void
   onOpen: (id: string) => void
   onFocusSearch: () => void
+  /** 面板关闭时按 Esc：清空搜索（没有搜索内容时由调用方忽略） */
+  onEscape: () => void
 }
 
 /**
  * 委托列表快捷键。
  *
  * - Ctrl/Cmd+K：聚焦搜索（仅在面板关闭时生效）
+ * - Esc：面板关闭时清空搜索内容（详情面板打开时由 Dialog 自行处理，这里不介入）
  * - ↑/↓：移动列表高亮，不打开详情
  * - Enter：仅在列表容器自身获得焦点时打开选中项（行按钮自身的 Enter 交给原生 click）
  *
  * 统一跳过：输入法组合中、可编辑控件内、默认行为已被阻止、面板打开时。
  */
 export function useCommissionKeyboard(options: CommissionKeyboardOptions) {
-  const { enabled, rows, activeId, onActivate, onOpen, onFocusSearch } = options
+  const { enabled, rows, activeId, onActivate, onOpen, onFocusSearch, onEscape } = options
 
   useEffect(() => {
     function handleGlobal(event: KeyboardEvent) {
       if (!enabled || isImeComposing(event) || isEditableTarget(event.target) || event.defaultPrevented) {
+        return
+      }
+      if (event.key === 'Escape') {
+        onEscape()
         return
       }
       if ((event.metaKey || event.ctrlKey) && (event.key === 'k' || event.key === 'K')) {
@@ -52,7 +59,7 @@ export function useCommissionKeyboard(options: CommissionKeyboardOptions) {
 
     window.addEventListener('keydown', handleGlobal)
     return () => window.removeEventListener('keydown', handleGlobal)
-  }, [enabled, onFocusSearch])
+  }, [enabled, onFocusSearch, onEscape])
 
   const handleListKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLElement>) => {

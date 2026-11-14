@@ -166,6 +166,57 @@ describe('委托筛选与计数', () => {
   })
 })
 
+describe('Esc 行为', () => {
+  it('详情打开时，Esc 关闭详情（优先于清空搜索）', async () => {
+    useCommissionsUiStore.setState({
+      selectedId: ROW_B.id,
+      query: { ...DEFAULT_COMMISSION_QUERY, text: '阿青' }
+    })
+    installApi([ROW_A, ROW_B], [xia, qing])
+
+    render(<CommissionsPage />)
+
+    const sheet = await screen.findByTestId('sheet')
+    fireEvent.keyDown(sheet, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument())
+    // 只关闭详情，不清空搜索
+    expect(screen.getByLabelText('搜索委托或客户')).toHaveValue('阿青')
+  })
+
+  it('面板关闭时，即使焦点不在搜索框，Esc 也会清空搜索内容', async () => {
+    installApi([ROW_A, ROW_B], [xia, qing])
+    const user = userEvent.setup()
+    render(<CommissionsPage />)
+
+    await screen.findByText('A 半身立绘')
+    const search = screen.getByLabelText('搜索委托或客户')
+    await user.type(search, '阿青')
+    expect(screen.getByTestId('commissions-summary')).toHaveTextContent('筛选后 1 / 共 2')
+
+    const list = screen.getByRole('group', { name: '委托列表' })
+    list.focus()
+    fireEvent.keyDown(list, { key: 'Escape' })
+
+    await waitFor(() => expect(search).toHaveValue(''))
+    expect(screen.getByTestId('commissions-summary')).toHaveTextContent('共 2 个委托')
+    expect(screen.queryByTestId('sheet')).not.toBeInTheDocument()
+  })
+
+  it('搜索为空且没有面板时，Esc 不会产生副作用', async () => {
+    installApi([ROW_A, ROW_B], [xia, qing])
+    render(<CommissionsPage />)
+
+    await screen.findByText('A 半身立绘')
+    const list = screen.getByRole('group', { name: '委托列表' })
+    list.focus()
+    fireEvent.keyDown(list, { key: 'Escape' })
+
+    expect(screen.getByTestId('commissions-summary')).toHaveTextContent('共 2 个委托')
+    expect(screen.queryByTestId('sheet')).not.toBeInTheDocument()
+  })
+})
+
 describe('委托列表键盘', () => {
   it('↓ 移动高亮、Enter 打开详情', async () => {
     installApi([ROW_A, ROW_B], [xia, qing])
