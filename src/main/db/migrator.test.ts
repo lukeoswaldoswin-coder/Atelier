@@ -19,7 +19,8 @@ describe('数据库迁移机制', () => {
     expect(result.applied).toEqual([
       '001-initial',
       '002-deadline-and-payment',
-      '003-tasks'
+      '003-tasks',
+    '004-task-planned-date'
     ])
     expect(result.previouslyApplied).toEqual([])
     expect(listTables(db)).toEqual(['clients', 'commissions', 'schema_migrations', 'tasks'])
@@ -36,9 +37,10 @@ describe('数据库迁移机制', () => {
     expect(second.previouslyApplied).toEqual([
       '001-initial',
       '002-deadline-and-payment',
-      '003-tasks'
+      '003-tasks',
+    '004-task-planned-date'
     ])
-    expect(getAppliedMigrations(db)).toHaveLength(3)
+    expect(getAppliedMigrations(db)).toHaveLength(4)
     db.close()
   })
 
@@ -50,7 +52,8 @@ describe('数据库迁移机制', () => {
     expect(records.map((row) => row.id)).toEqual([
       '001-initial',
       '002-deadline-and-payment',
-      '003-tasks'
+      '003-tasks',
+    '004-task-planned-date'
     ])
     expect(records[0]?.name).toContain('clients')
     expect(records[1]?.name).toContain('付款')
@@ -95,7 +98,8 @@ describe('数据库迁移机制', () => {
     expect(MIGRATIONS.map((migration) => migration.id)).toEqual([
       '001-initial',
       '002-deadline-and-payment',
-      '003-tasks'
+      '003-tasks',
+    '004-task-planned-date'
     ])
     const first = MIGRATIONS[0]?.sql ?? ''
     expect(first).toContain('CREATE TABLE clients')

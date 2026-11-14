@@ -175,7 +175,8 @@ describe('主进程启动流程', () => {
     expect(migrations.map((row) => row.id)).toEqual([
       '001-initial',
       '002-deadline-and-payment',
-      '003-tasks'
+      '003-tasks',
+    '004-task-planned-date'
     ])
 
     // 数据相关通道均已注册
@@ -188,6 +189,7 @@ describe('主进程启动流程', () => {
     expect(state.handlers.has(IpcChannel.tasksReorder)).toBe(true)
     expect(state.handlers.has(IpcChannel.tasksArchive)).toBe(true)
     expect(state.handlers.has(IpcChannel.tasksUnarchive)).toBe(true)
+    expect(state.handlers.has(IpcChannel.calendarTasks)).toBe(true)
 
     const win = state.windows[0] as WindowLike
     const webPreferences = win.options.webPreferences

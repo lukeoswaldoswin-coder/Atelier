@@ -24,7 +24,9 @@ export const IpcChannel = {
   tasksUpdate: 'tasks:update',
   tasksReorder: 'tasks:reorder',
   tasksArchive: 'tasks:archive',
-  tasksUnarchive: 'tasks:unarchive'
+  tasksUnarchive: 'tasks:unarchive',
+
+  calendarTasks: 'calendar:tasks'
 } as const
 
 export type IpcChannelName = (typeof IpcChannel)[keyof typeof IpcChannel]

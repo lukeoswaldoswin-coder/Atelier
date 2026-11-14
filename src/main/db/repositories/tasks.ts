@@ -2,8 +2,13 @@ import { randomUUID } from 'node:crypto'
 import {
   taskSchema,
   type ByIdInput,
+  type CalendarDeadline,
+  type CalendarTask,
+  type CalendarTasksInput,
+  type CalendarTasksOutput,
   type CommissionStatus,
   type CreateTaskInput,
+  type Deadline,
   type ListTasksInput,
   type ReorderTasksInput,
   type Task,
@@ -11,30 +16,50 @@ import {
   type UpdateTaskInput
 } from '@shared/domain'
 import { DataError } from '@shared/errors'
+import { calendarDateOfDeadline } from '@shared/calendar-date'
 import { TASK_STAGE_LABELS } from '@shared/tasks'
 import type { AppDatabase } from '../database'
 
-const STAGE_CASE = `CASE stage
+const STAGE_CASE = `CASE t.stage
   WHEN 'draft' THEN 0
   WHEN 'lineart' THEN 1
   WHEN 'color' THEN 2
   WHEN 'final' THEN 3
   ELSE 4 END`
 
-const COLUMNS = [
-  'id',
-  'commission_id AS commissionId',
-  'title',
-  'description',
-  'stage',
-  'status',
-  'estimated_minutes AS estimatedMinutes',
-  'sort_order AS sortOrder',
-  'completed_at AS completedAt',
-  'created_at AS createdAt',
-  'updated_at AS updatedAt',
-  'archived_at AS archivedAt'
+const TASK_COLUMNS = [
+  't.id',
+  't.commission_id AS commissionId',
+  't.title',
+  't.description',
+  't.stage',
+  't.status',
+  't.estimated_minutes AS estimatedMinutes',
+  't.planned_date AS plannedDate',
+  't.sort_order AS sortOrder',
+  't.completed_at AS completedAt',
+  't.created_at AS createdAt',
+  't.updated_at AS updatedAt',
+  't.archived_at AS archivedAt'
 ].join(', ')
+
+const COMMISSION_COLUMNS = [
+  'c.id AS commissionId',
+  'c.title AS commissionTitle',
+  'c.status AS commissionStatus',
+  'c.priority AS commissionPriority',
+  'c.deadline_kind AS commissionDeadlineKind',
+  'c.deadline_date AS commissionDeadlineDate',
+  'c.deadline_at AS commissionDeadlineAt',
+  'c.deadline_timezone AS commissionDeadlineTimeZone',
+  'cl.name AS clientName'
+].join(', ')
+
+const CALENDAR_JOINS = `
+  FROM tasks t
+  JOIN commissions c ON c.id = t.commission_id
+  LEFT JOIN clients cl ON cl.id = c.client_id
+`
 
 export interface TasksRepository {
   list(input: ListTasksInput): Task[]
@@ -44,6 +69,8 @@ export interface TasksRepository {
   reorder(input: ReorderTasksInput): Task[]
   archive(input: ByIdInput): Task | null
   unarchive(input: ByIdInput): Task | null
+  /** 日历范围查询：已安排任务、未安排任务、范围内的委托截止。 */
+  calendar(input: CalendarTasksInput): CalendarTasksOutput
 }
 
 function toNumber(value: unknown): number {
@@ -69,6 +96,10 @@ function rowToTask(row: Record<string, unknown>): Task {
       row['estimatedMinutes'] === null || row['estimatedMinutes'] === undefined
         ? null
         : toNumber(row['estimatedMinutes']),
+    plannedDate:
+      row['plannedDate'] === null || row['plannedDate'] === undefined
+        ? null
+        : toText(row['plannedDate']),
     sortOrder: toNumber(row['sortOrder']),
     completedAt:
       row['completedAt'] === null || row['completedAt'] === undefined
@@ -86,7 +117,7 @@ function rowToTask(row: Record<string, unknown>): Task {
 /** 委托仓储：只做 SQL 与映射，不依赖 Electron。 */
 export function createTasksRepository(db: AppDatabase): TasksRepository {
   function getById(id: string): Task | null {
-    const row = db.prepare(`SELECT ${COLUMNS} FROM tasks WHERE id = ?`).get(id) as
+    const row = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks t WHERE t.id = ?`).get(id) as
       | Record<string, unknown>
       | undefined
     return row ? rowToTask(row) : null
@@ -161,15 +192,46 @@ export function createTasksRepository(db: AppDatabase): TasksRepository {
   }
 
   function listTasks(input: ListTasksInput): Task[] {
-    const where = ['commission_id = @commissionId']
-    if (!input.includeArchived) where.push('archived_at IS NULL')
+    const where = ['t.commission_id = @commissionId']
+    if (!input.includeArchived) where.push('t.archived_at IS NULL')
 
-    const sql = `SELECT ${COLUMNS} FROM tasks
+    const sql = `SELECT ${TASK_COLUMNS} FROM tasks t
                   WHERE ${where.join(' AND ')}
-                  ORDER BY ${STAGE_CASE}, sort_order, created_at, id`
+                  ORDER BY ${STAGE_CASE}, t.sort_order, t.created_at, t.id`
     return (db.prepare(sql).all({ commissionId: input.commissionId }) as Array<Record<string, unknown>>).map(
       rowToTask
     )
+  }
+
+  function commissionFromRow(row: Record<string, unknown>) {
+    let deadline: Deadline
+    if (row['commissionDeadlineKind'] === 'date') {
+      deadline = { kind: 'date', date: toText(row['commissionDeadlineDate']) }
+    } else if (row['commissionDeadlineKind'] === 'datetime') {
+      deadline = {
+        kind: 'datetime',
+        at: toText(row['commissionDeadlineAt']),
+        timeZone: toText(row['commissionDeadlineTimeZone'])
+      }
+    } else {
+      deadline = { kind: 'none' }
+    }
+
+    return {
+      id: toText(row['commissionId']),
+      title: toText(row['commissionTitle']),
+      status: toText(row['commissionStatus']) as CommissionStatus,
+      priority: toNumber(row['commissionPriority']),
+      deadline
+    }
+  }
+
+  function rowToCalendarTask(row: Record<string, unknown>): CalendarTask {
+    return {
+      task: rowToTask(row),
+      commission: commissionFromRow(row),
+      clientName: row['clientName'] === null || row['clientName'] === undefined ? '未知客户' : toText(row['clientName'])
+    }
   }
 
   return {
@@ -188,10 +250,12 @@ export function createTasksRepository(db: AppDatabase): TasksRepository {
         db.prepare(
           `INSERT INTO tasks (
              id, commission_id, title, description, stage, status,
-             estimated_minutes, sort_order, completed_at, created_at, updated_at, archived_at
+             estimated_minutes, planned_date, sort_order, completed_at,
+             created_at, updated_at, archived_at
            ) VALUES (
              @id, @commissionId, @title, @description, @stage, 'todo',
-             @estimatedMinutes, @sortOrder, NULL, @createdAt, @updatedAt, NULL
+             @estimatedMinutes, @plannedDate, @sortOrder, NULL,
+             @createdAt, @updatedAt, NULL
            )`
         ).run({
           id,
@@ -200,6 +264,7 @@ export function createTasksRepository(db: AppDatabase): TasksRepository {
           description: input.description ?? null,
           stage: input.stage,
           estimatedMinutes: input.estimatedMinutes ?? null,
+          plannedDate: input.plannedDate ?? null,
           sortOrder,
           createdAt: now,
           updatedAt: now
@@ -241,6 +306,11 @@ export function createTasksRepository(db: AppDatabase): TasksRepository {
         if (input.estimatedMinutes !== undefined) {
           fields.push('estimated_minutes = @estimatedMinutes')
           params['estimatedMinutes'] = input.estimatedMinutes
+        }
+        // 部分更新语义：undefined 保持、null 清除、日期更新
+        if (input.plannedDate !== undefined) {
+          fields.push('planned_date = @plannedDate')
+          params['plannedDate'] = input.plannedDate
         }
         if (input.status !== undefined) {
           fields.push('status = @status', 'completed_at = @completedAt')
@@ -333,6 +403,80 @@ export function createTasksRepository(db: AppDatabase): TasksRepository {
 
         return getById(input.id)
       })()
+    },
+
+    calendar(input: CalendarTasksInput): CalendarTasksOutput {
+      const scheduledRows = db
+        .prepare(
+          `SELECT ${TASK_COLUMNS}, ${COMMISSION_COLUMNS}
+             ${CALENDAR_JOINS}
+            WHERE t.archived_at IS NULL
+              AND c.archived_at IS NULL
+              AND c.status <> 'cancelled'
+              AND t.planned_date BETWEEN @from AND @to
+            ORDER BY t.planned_date, ${STAGE_CASE}, t.sort_order, t.created_at, t.id`
+        )
+        .all({ from: input.from, to: input.to }) as Array<Record<string, unknown>>
+
+      // 未安排：未完成、未归档任务；委托仅草稿/进行中（已完成委托不进此列表）
+      const unscheduledRows = db
+        .prepare(
+          `SELECT ${TASK_COLUMNS}, ${COMMISSION_COLUMNS}
+             ${CALENDAR_JOINS}
+            WHERE t.planned_date IS NULL
+              AND t.archived_at IS NULL
+              AND t.status <> 'done'
+              AND c.archived_at IS NULL
+              AND c.status IN ('draft', 'active')
+            ORDER BY
+              CASE c.deadline_kind
+                WHEN 'date' THEN c.deadline_date
+                WHEN 'datetime' THEN substr(c.deadline_at, 1, 10)
+                ELSE NULL END IS NULL,
+              CASE c.deadline_kind
+                WHEN 'date' THEN c.deadline_date
+                WHEN 'datetime' THEN substr(c.deadline_at, 1, 10)
+                ELSE NULL END,
+              ${STAGE_CASE}, t.sort_order, t.created_at, t.id`
+        )
+        .all() as Array<Record<string, unknown>>
+
+      // 范围内的委托截止（与任务计划日期相互独立）
+      const deadlineRows = db
+        .prepare(
+          `SELECT ${COMMISSION_COLUMNS}
+             FROM commissions c
+             LEFT JOIN clients cl ON cl.id = c.client_id
+            WHERE c.archived_at IS NULL
+              AND c.status <> 'cancelled'
+              AND c.deadline_kind <> 'none'`
+        )
+        .all() as Array<Record<string, unknown>>
+
+      const deadlines: CalendarDeadline[] = []
+      for (const row of deadlineRows) {
+        const commission = commissionFromRow(row)
+        const date = calendarDateOfDeadline(commission.deadline)
+        if (!date || date < input.from || date > input.to) continue
+        deadlines.push({
+          commission,
+          clientName:
+            row['clientName'] === null || row['clientName'] === undefined
+              ? '未知客户'
+              : toText(row['clientName']),
+          date,
+          deadline: commission.deadline
+        })
+      }
+      deadlines.sort(
+        (a, b) => a.date.localeCompare(b.date) || a.commission.title.localeCompare(b.commission.title, 'zh-Hans-CN')
+      )
+
+      return {
+        scheduled: scheduledRows.map(rowToCalendarTask),
+        unscheduled: unscheduledRows.map(rowToCalendarTask),
+        deadlines
+      }
     }
   }
 }

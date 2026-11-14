@@ -2,6 +2,8 @@ import { z } from 'zod'
 import { IpcChannel } from './channels'
 import {
   byIdInputSchema,
+  calendarTasksInputSchema,
+  calendarTasksOutputSchema,
   clientSchema,
   commissionSchema,
   createClientInputSchema,
@@ -127,6 +129,11 @@ export const ipcContracts = {
   [IpcChannel.tasksUnarchive]: {
     input: byIdInputSchema,
     output: taskSchema.nullable()
+  },
+
+  [IpcChannel.calendarTasks]: {
+    input: calendarTasksInputSchema,
+    output: calendarTasksOutputSchema
   }
 } as const
 

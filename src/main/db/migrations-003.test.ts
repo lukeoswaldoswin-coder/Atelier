@@ -74,11 +74,13 @@ describe('迁移 003：绘画任务表与委托完成时间', () => {
         'archived_at'
       ])
     )
-    expect(indexesOf(db, 'tasks')).toEqual([
-      'idx_tasks_archived',
-      'idx_tasks_commission_stage_sort',
-      'idx_tasks_commission_status'
-    ])
+    expect(indexesOf(db, 'tasks')).toEqual(
+      expect.arrayContaining([
+        'idx_tasks_archived',
+        'idx_tasks_commission_stage_sort',
+        'idx_tasks_commission_status'
+      ])
+    )
     expect(columnsOf(db, 'commissions')).toContain('completed_at')
     expect(getAppliedMigrations(db).map((row) => row.id)).toContain('003-tasks')
     assertNoForeignKeyViolations(db, '测试')

@@ -1,5 +1,7 @@
 import type {
   ByIdInput,
+  CalendarTasksInput,
+  CalendarTasksOutput,
   Client,
   Commission,
   CreateClientInput,
@@ -53,5 +55,9 @@ export interface AtelierApi {
     reorder(input: ReorderTasksInput): Promise<Task[]>
     archive(input: ByIdInput): Promise<Task | null>
     unarchive(input: ByIdInput): Promise<Task | null>
+  }
+
+  calendar: {
+    tasks(input: CalendarTasksInput): Promise<CalendarTasksOutput>
   }
 }

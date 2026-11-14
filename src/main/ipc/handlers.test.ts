@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { IpcChannel, ipcChannelNames } from '@shared/channels'
 import type { AppInfo } from '@shared/contracts'
-import type { Client, Commission, Task } from '@shared/domain'
+import type { CalendarTasksOutput, Client, Commission, Task } from '@shared/domain'
 import { applyMigrations } from '../db/migrator'
 import { openDatabase, type AppDatabase } from '../db/database'
 import { createClientsRepository, type ClientsRepository } from '../db/repositories/clients'
@@ -354,6 +354,42 @@ describe('createIpcHandlers', () => {
     await expect(
       handlers[IpcChannel.commissionsUpdate]({ id: commission.id, status: 'completed' })
     ).rejects.toThrow(/未完成任务/)
+    db.close()
+  })
+
+  it('calendar:tasks 返回日历数据，并拒绝非法日期', async () => {
+    const { handlers, db } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+    const commission = (await handlers[IpcChannel.commissionsCreate]({
+      clientId: client.id,
+      title: '委托',
+      type: '插画',
+      deadline: { kind: 'date', date: '2026-03-10' }
+    })) as Commission
+    await handlers[IpcChannel.commissionsUpdate]({ id: commission.id, status: 'active' })
+
+    const task = (await handlers[IpcChannel.tasksCreate]({
+      commissionId: commission.id,
+      title: '任务',
+      stage: 'draft'
+    })) as Task
+    await handlers[IpcChannel.tasksUpdate]({ id: task.id, plannedDate: '2026-03-02' })
+
+    const result = (await handlers[IpcChannel.calendarTasks]({
+      from: '2026-03-01',
+      to: '2026-03-31'
+    })) as CalendarTasksOutput
+
+    expect(result.scheduled).toHaveLength(1)
+    expect(result.scheduled[0]?.task.plannedDate).toBe('2026-03-02')
+    expect(result.deadlines[0]?.date).toBe('2026-03-10')
+
+    await expect(
+      handlers[IpcChannel.calendarTasks]({ from: '2026-04-01', to: '2026-03-01' })
+    ).rejects.toThrow()
+    await expect(
+      handlers[IpcChannel.calendarTasks]({ from: '2026-02-30', to: '2026-03-01' })
+    ).rejects.toThrow()
     db.close()
   })
 

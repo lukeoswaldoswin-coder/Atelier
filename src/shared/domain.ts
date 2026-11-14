@@ -216,6 +216,8 @@ export const taskSchema = z.object({
   status: taskStatusSchema,
   /** null = 未估；单位分钟 */
   estimatedMinutes: z.number().int().nonnegative().nullable(),
+  /** 计划日期（纯日历日期）；null = 未安排。与委托截止时间完全独立。 */
+  plannedDate: deadlineDateStringSchema.nullable(),
   sortOrder: z.number().int().nonnegative(),
   /** 与 status 联动：done 时必填，其余为 null */
   completedAt: utcIsoSchema.nullable(),
@@ -230,13 +232,15 @@ export const createTaskInputSchema = z.strictObject({
   title: nameSchema,
   description: longTextSchema.nullish(),
   stage: taskStageSchema.default('draft'),
-  estimatedMinutes: estimatedMinutesSchema.nullish()
+  estimatedMinutes: estimatedMinutesSchema.nullish(),
+  plannedDate: deadlineDateStringSchema.nullish()
 })
 export type CreateTaskInput = z.infer<typeof createTaskInputSchema>
 
 /**
  * 更新任务。
  * completedAt 不在输入里：完成时间由 status 推导，防止渲染进程伪造。
+ * plannedDate 的部分更新语义：不传保持原值，传 null 清除，传日期更新。
  */
 export const updateTaskInputSchema = z.strictObject({
   id: uuidSchema,
@@ -244,7 +248,8 @@ export const updateTaskInputSchema = z.strictObject({
   description: longTextSchema.nullish(),
   stage: taskStageSchema.optional(),
   status: taskStatusSchema.optional(),
-  estimatedMinutes: estimatedMinutesSchema.nullish()
+  estimatedMinutes: estimatedMinutesSchema.nullish(),
+  plannedDate: deadlineDateStringSchema.nullish()
 })
 export type UpdateTaskInput = z.infer<typeof updateTaskInputSchema>
 
@@ -260,3 +265,51 @@ export const reorderTasksInputSchema = z.strictObject({
   orderedIds: z.array(uuidSchema).max(500, '单个阶段的任务过多')
 })
 export type ReorderTasksInput = z.infer<typeof reorderTasksInputSchema>
+
+// ---------------------------------------------------------------------------
+// 日历（P3）
+// ---------------------------------------------------------------------------
+
+/** 日历中展示的委托摘要。priority 是现有字段，仅供展示，不参与任何排期算法。 */
+export const calendarCommissionSchema = z.object({
+  id: uuidSchema,
+  title: z.string().min(1),
+  status: commissionStatusSchema,
+  priority: prioritySchema,
+  deadline: deadlineSchema
+})
+export type CalendarCommission = z.infer<typeof calendarCommissionSchema>
+
+export const calendarTaskSchema = z.object({
+  task: taskSchema,
+  commission: calendarCommissionSchema,
+  clientName: z.string().min(1)
+})
+export type CalendarTask = z.infer<typeof calendarTaskSchema>
+
+export const calendarDeadlineSchema = z.object({
+  commission: calendarCommissionSchema,
+  clientName: z.string().min(1),
+  /** 按创建时区换算后的日历日期，用于分组 */
+  date: deadlineDateStringSchema,
+  deadline: deadlineSchema
+})
+export type CalendarDeadline = z.infer<typeof calendarDeadlineSchema>
+
+export const calendarTasksInputSchema = z
+  .strictObject({
+    from: deadlineDateStringSchema,
+    to: deadlineDateStringSchema
+  })
+  .refine((value) => value.from <= value.to, {
+    message: '开始日期不能晚于结束日期',
+    path: ['to']
+  })
+export type CalendarTasksInput = z.infer<typeof calendarTasksInputSchema>
+
+export const calendarTasksOutputSchema = z.object({
+  scheduled: z.array(calendarTaskSchema),
+  unscheduled: z.array(calendarTaskSchema),
+  deadlines: z.array(calendarDeadlineSchema)
+})
+export type CalendarTasksOutput = z.infer<typeof calendarTasksOutputSchema>

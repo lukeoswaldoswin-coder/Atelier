@@ -30,7 +30,8 @@ describe('数据持久化', () => {
     expect(first.migration.applied).toEqual([
       '001-initial',
       '002-deadline-and-payment',
-      '003-tasks'
+      '003-tasks',
+    '004-task-planned-date'
     ])
 
     const client = first.clients.create(createClientInputSchema.parse({ name: '重启测试客户' }))
@@ -58,7 +59,8 @@ describe('数据持久化', () => {
     expect(second.migration.previouslyApplied).toEqual([
       '001-initial',
       '002-deadline-and-payment',
-      '003-tasks'
+      '003-tasks',
+    '004-task-planned-date'
     ])
 
     const clients = second.clients.list({ includeArchived: true })

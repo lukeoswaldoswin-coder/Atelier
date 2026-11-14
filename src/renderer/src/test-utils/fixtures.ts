@@ -47,6 +47,7 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     stage: 'draft',
     status: 'todo',
     estimatedMinutes: null,
+    plannedDate: null,
     sortOrder: 0,
     completedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',

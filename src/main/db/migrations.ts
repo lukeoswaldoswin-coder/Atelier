@@ -329,5 +329,31 @@ export const MIGRATIONS: readonly Migration[] = [
         )
       }
     }
+  },
+  {
+    id: '004-task-planned-date',
+    name: '任务计划日期',
+    run(db: AppDatabase): void {
+      // 仅追加列：既有任务升级后 planned_date 为 NULL（未安排）
+      db.exec(
+        `ALTER TABLE tasks ADD COLUMN planned_date TEXT
+           CHECK (
+             planned_date IS NULL
+             OR (
+               planned_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+               AND date(planned_date) IS NOT NULL
+               AND date(planned_date) = planned_date
+             )
+           )`
+      )
+
+      db.exec(`
+        CREATE INDEX idx_tasks_planned_date ON tasks (planned_date);
+        CREATE INDEX idx_tasks_unscheduled ON tasks (commission_id)
+          WHERE planned_date IS NULL AND archived_at IS NULL AND status <> 'done';
+      `)
+
+      assertNoForeignKeyViolations(db, '迁移 004')
+    }
   }
 ]
