@@ -1,4 +1,5 @@
-import { MIGRATIONS, type Migration } from './migrations'
+import { resolveSystemTimeZone } from '@shared/time'
+import { MIGRATIONS, type Migration, type MigrationContext } from './migrations'
 import type { AppDatabase } from './database'
 
 export interface AppliedMigration {
@@ -14,9 +15,17 @@ export interface MigrationRunResult {
   readonly previouslyApplied: readonly string[]
 }
 
+export interface MigrationOptions {
+  /** 覆盖迁移上下文里的时区（测试用） */
+  readonly timeZone?: string
+  /** 覆盖迁移上下文里的时间（测试用） */
+  readonly now?: string
+}
+
 /**
  * 校验迁移清单本身是否合法：
- * id 非空且唯一，并且按字典序严格递增（保证执行顺序确定、可复现）。
+ * id 非空且唯一、按字典序严格递增（保证执行顺序确定、可复现），
+ * 并且每个迁移必须提供 sql 或 run 之一。
  */
 export function assertValidMigrationList(migrations: readonly Migration[]): void {
   let previousId = ''
@@ -32,9 +41,13 @@ export function assertValidMigrationList(migrations: readonly Migration[]): void
     if (migration.id <= previousId) {
       throw new Error(`迁移必须按 id 递增排列：${previousId} → ${migration.id}`)
     }
-    if (!migration.sql || migration.sql.trim().length === 0) {
-      throw new Error(`迁移 ${migration.id} 的 SQL 为空`)
+
+    const hasSql = typeof migration.sql === 'string' && migration.sql.trim().length > 0
+    const hasRun = typeof migration.run === 'function'
+    if (!hasSql && !hasRun) {
+      throw new Error(`迁移 ${migration.id} 既没有 SQL 也没有执行函数`)
     }
+
     seen.add(migration.id)
     previousId = migration.id
   }
@@ -56,7 +69,8 @@ export function getAppliedMigrations(db: AppDatabase): AppliedMigration[] {
  */
 export function applyMigrations(
   db: AppDatabase,
-  migrations: readonly Migration[] = MIGRATIONS
+  migrations: readonly Migration[] = MIGRATIONS,
+  options: MigrationOptions = {}
 ): MigrationRunResult {
   assertValidMigrationList(migrations)
 
@@ -74,11 +88,19 @@ export function applyMigrations(
 
   if (pending.length > 0) {
     const appliedAt = new Date().toISOString()
+    const context: MigrationContext = {
+      timeZone: options.timeZone ?? resolveSystemTimeZone(),
+      now: options.now ?? appliedAt
+    }
     const insertRecord = db.prepare('INSERT INTO schema_migrations (id, name, applied_at) VALUES (?, ?, ?)')
 
     const runAll = db.transaction((list: readonly Migration[]) => {
       for (const migration of list) {
-        db.exec(migration.sql)
+        if (typeof migration.run === 'function') {
+          migration.run(db, context)
+        } else {
+          db.exec(migration.sql as string)
+        }
         insertRecord.run(migration.id, migration.name, appliedAt)
       }
     })

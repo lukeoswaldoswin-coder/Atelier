@@ -27,7 +27,7 @@ describe('数据持久化', () => {
 
     // 第一次启动：建库、写数据
     const first = createDatabaseService(filePath)
-    expect(first.migration.applied).toEqual(['001-initial'])
+    expect(first.migration.applied).toEqual(['001-initial', '002-deadline-and-payment'])
 
     const client = first.clients.create(createClientInputSchema.parse({ name: '重启测试客户' }))
     const commission = first.commissions.create(
@@ -36,9 +36,14 @@ describe('数据持久化', () => {
         title: '重启测试委托',
         type: '插画',
         quoteAmountCents: 8800,
-        deadlineAt: '2026-12-31T15:59:00.000Z'
+        deadline: {
+          kind: 'datetime',
+          at: '2026-12-31T10:00:00.000Z',
+          timeZone: 'Asia/Shanghai'
+        }
       })
     )
+    first.commissions.update({ id: commission.id, paidAmountCents: 3000 })
     first.close()
 
     expect(existsSync(filePath)).toBe(true)
@@ -46,18 +51,54 @@ describe('数据持久化', () => {
     // 第二次启动：不应重复迁移，数据应原样读回
     const second = createDatabaseService(filePath)
     expect(second.migration.applied).toEqual([])
-    expect(second.migration.previouslyApplied).toEqual(['001-initial'])
+    expect(second.migration.previouslyApplied).toEqual([
+      '001-initial',
+      '002-deadline-and-payment'
+    ])
 
     const clients = second.clients.list({ includeArchived: true })
     expect(clients.map((row) => row.id)).toEqual([client.id])
 
     const commissions = second.commissions.list({ includeArchived: true })
     expect(commissions).toHaveLength(1)
-    expect(commissions[0]?.id).toBe(commission.id)
-    expect(commissions[0]?.quoteAmountCents).toBe(8800)
-    expect(commissions[0]?.deadlineAt).toBe('2026-12-31T15:59:00.000Z')
-    expect(commissions[0]?.createdAt).toBe(commission.createdAt)
+    const loaded = commissions[0]
+    expect(loaded?.id).toBe(commission.id)
+    expect(loaded?.quoteAmountCents).toBe(8800)
+    expect(loaded?.paidAmountCents).toBe(3000)
+    expect(loaded?.paymentStatus).toBe('partial')
+    expect(loaded?.outstandingCents).toBe(5800)
+    expect(loaded?.deadline).toEqual({
+      kind: 'datetime',
+      at: '2026-12-31T10:00:00.000Z',
+      timeZone: 'Asia/Shanghai'
+    })
+    expect(loaded?.createdAt).toBe(commission.createdAt)
 
+    second.close()
+  })
+
+  it('未报价与日期型截止在重启后保持原样（日期不做时区换算）', () => {
+    const dir = makeTempDir()
+    const filePath = join(dir, 'atelier.db')
+
+    const first = createDatabaseService(filePath)
+    const client = first.clients.create(createClientInputSchema.parse({ name: '客户' }))
+    const commission = first.commissions.create(
+      createCommissionInputSchema.parse({
+        clientId: client.id,
+        title: '日期截止且未报价',
+        type: '插画',
+        deadline: { kind: 'date', date: '2026-12-31' }
+      })
+    )
+    first.close()
+
+    const second = createDatabaseService(filePath)
+    const loaded = second.commissions.get({ id: commission.id })
+    expect(loaded?.quoteAmountCents).toBeNull()
+    expect(loaded?.paymentStatus).toBe('unquoted')
+    expect(loaded?.outstandingCents).toBeNull()
+    expect(loaded?.deadline).toEqual({ kind: 'date', date: '2026-12-31' })
     second.close()
   })
 

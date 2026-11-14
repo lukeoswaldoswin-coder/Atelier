@@ -83,6 +83,79 @@ describe('createIpcHandlers', () => {
     db.close()
   })
 
+  it('commissions:create 默认按“未报价”处理', async () => {
+    const { handlers, db } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+
+    const commission = (await handlers[IpcChannel.commissionsCreate]({
+      clientId: client.id,
+      title: '半身立绘',
+      type: '插画'
+    })) as Commission
+
+    expect(commission.quoteAmountCents).toBeNull()
+    expect(commission.paymentStatus).toBe('unquoted')
+    expect(commission.outstandingCents).toBeNull()
+    expect(commission.deadline).toEqual({ kind: 'none' })
+    db.close()
+  })
+
+  it('commissions:create 带报价时为未付款', async () => {
+    const { handlers, db } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+
+    const commission = (await handlers[IpcChannel.commissionsCreate]({
+      clientId: client.id,
+      title: '半身立绘',
+      type: '插画',
+      quoteAmountCents: 12800
+    })) as Commission
+
+    expect(commission.paymentStatus).toBe('unpaid')
+    expect(commission.outstandingCents).toBe(12800)
+    db.close()
+  })
+
+  it('渲染进程提交 paymentStatus 会被拒绝', async () => {
+    const { handlers, commissions, db } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+
+    await expect(
+      handlers[IpcChannel.commissionsCreate]({
+        clientId: client.id,
+        title: 'x',
+        type: 'y',
+        paymentStatus: 'paid'
+      })
+    ).rejects.toThrow()
+
+    expect(commissions.list({ includeArchived: true })).toHaveLength(0)
+    db.close()
+  })
+
+  it('付款更新：部分付款后状态与未收金额正确，超额被拒绝', async () => {
+    const { handlers, db } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+    const commission = (await handlers[IpcChannel.commissionsCreate]({
+      clientId: client.id,
+      title: 'x',
+      type: 'y',
+      quoteAmountCents: 10000
+    })) as Commission
+
+    const partial = (await handlers[IpcChannel.commissionsUpdate]({
+      id: commission.id,
+      paidAmountCents: 4000
+    })) as Commission
+    expect(partial.paymentStatus).toBe('partial')
+    expect(partial.outstandingCents).toBe(6000)
+
+    await expect(
+      handlers[IpcChannel.commissionsUpdate]({ id: commission.id, paidAmountCents: 20000 })
+    ).rejects.toThrow(/不能超过报价/)
+    db.close()
+  })
+
   it('commissions:create 在客户不存在时给出可读错误', async () => {
     const { handlers, db } = setup()
 
@@ -100,10 +173,10 @@ describe('createIpcHandlers', () => {
       clientId: client.id,
       title: '半身立绘',
       type: '插画',
-      quoteAmountCents: 12800
+      quoteAmountCents: 12800,
+      deadline: { kind: 'date', date: '2026-12-31' }
     })) as Commission
-    expect(commission.quoteAmountCents).toBe(12800)
-    expect(commission.status).toBe('draft')
+    expect(commission.deadline).toEqual({ kind: 'date', date: '2026-12-31' })
 
     const updated = (await handlers[IpcChannel.commissionsUpdate]({
       id: commission.id,

@@ -1,21 +1,22 @@
 import { z } from 'zod'
+import { isRealDateString, isValidTimeZone } from './time'
 
 /**
  * 领域模型与输入契约。
  *
- * 设计约定（P1.1）：
+ * 设计约定（P1.1.5）：
  * - 实体主键使用 UUID v4（文本存储）；
- * - 金额一律用整数“分”存储和传输，避免浮点误差；
- * - 时间统一用 UTC ISO 8601 字符串（带毫秒和 Z 后缀），展示时再由界面转本地时区；
+ * - 金额一律用整数“分”存储和传输：null = 未报价，0 = 免费，正数 = 报价；
+ * - 付款状态由金额推导，输入契约里**没有** paymentStatus 字段；
+ * - 时间统一用 UTC ISO 8601 字符串（带毫秒和 Z 后缀）；
+ * - 截止时间区分「无」「仅日期」「精确时刻」三种语义，日期型永不参与时区换算；
  * - 归档用 archived_at 软删除，不物理删除历史记录。
  */
 
 /** 标准 UUID 文本形式（含版本位与变体位校验）。 */
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-export const uuidSchema = z
-  .string()
-  .regex(UUID_PATTERN, '必须是合法的 UUID')
+export const uuidSchema = z.string().regex(UUID_PATTERN, '必须是合法的 UUID')
 
 /**
  * UTC ISO 8601 时间。必须带 Z 后缀，明确表示这是 UTC 时间，
@@ -42,8 +43,8 @@ const longTextSchema = z.string().trim().max(4000, '内容过长（最多 4000 �
 export const commissionStatusSchema = z.enum(['draft', 'active', 'completed', 'cancelled'])
 export type CommissionStatus = z.infer<typeof commissionStatusSchema>
 
-/** 付款状态：未付款 / 部分付款 / 已付清。 */
-export const paymentStatusSchema = z.enum(['unpaid', 'partial', 'paid'])
+/** 付款状态：未报价 / 无需付款 / 未付款 / 部分付款 / 已付清。 */
+export const paymentStatusSchema = z.enum(['unquoted', 'not_required', 'unpaid', 'partial', 'paid'])
 export type PaymentStatus = z.infer<typeof paymentStatusSchema>
 
 /** 优先级：1 最高，5 最低。 */
@@ -85,6 +86,30 @@ export const listClientsInputSchema = z.object({
 export type ListClientsInput = z.infer<typeof listClientsInputSchema>
 
 // ---------------------------------------------------------------------------
+// 截止时间（三态）
+// ---------------------------------------------------------------------------
+
+/** 仅日期：纯日历概念，不绑定时区、不做任何时区换算。 */
+export const deadlineDateStringSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式必须是 YYYY-MM-DD')
+  .refine(isRealDateString, '日期无效（例如 2 月 30 日不存在）')
+
+/** 精确时刻：UTC 瞬间 + 创建时使用的 IANA 时区。 */
+export const timeZoneStringSchema = z
+  .string()
+  .min(1, '时区不能为空')
+  .max(64, '时区名过长')
+  .refine(isValidTimeZone, '无效的 IANA 时区')
+
+export const deadlineSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('none') }),
+  z.strictObject({ kind: z.literal('date'), date: deadlineDateStringSchema }),
+  z.strictObject({ kind: z.literal('datetime'), at: utcIsoSchema, timeZone: timeZoneStringSchema })
+])
+export type Deadline = z.infer<typeof deadlineSchema>
+
+// ---------------------------------------------------------------------------
 // 委托
 // ---------------------------------------------------------------------------
 
@@ -96,37 +121,49 @@ export const commissionSchema = z.object({
   type: z.string().min(1),
   status: commissionStatusSchema,
   priority: prioritySchema,
-  deadlineAt: utcIsoSchema.nullable(),
-  quoteAmountCents: centsSchema,
+  deadline: deadlineSchema,
+  /** null = 未报价；0 = 免费；>0 = 报价金额（整数分） */
+  quoteAmountCents: centsSchema.nullable(),
   paidAmountCents: centsSchema,
+  /** 由金额推导，只读 */
   paymentStatus: paymentStatusSchema,
+  /** 未收金额：未报价为 null，免费/已付清为 0，其余为欠款（派生字段，不入库） */
+  outstandingCents: z.number().int().nonnegative().nullable(),
+  /** 是否已结清（paid / not_required） */
+  isSettled: z.boolean(),
   createdAt: utcIsoSchema,
   updatedAt: utcIsoSchema,
   archivedAt: utcIsoSchema.nullable()
 })
 export type Commission = z.infer<typeof commissionSchema>
 
-export const createCommissionInputSchema = z.object({
+/**
+ * 新建委托输入。
+ * 使用 strictObject：任何未知字段（尤其是 paymentStatus）都会被拒绝，
+ * 防止渲染进程绕过金额推导直接指定付款状态。
+ */
+export const createCommissionInputSchema = z.strictObject({
   clientId: uuidSchema,
   title: nameSchema,
   description: longTextSchema.nullish(),
   type: z.string().trim().min(1, '请填写委托类型').max(100, '委托类型最长 100 个字符'),
   priority: prioritySchema.default(3),
-  deadlineAt: utcIsoSchema.nullish(),
-  quoteAmountCents: centsSchema.default(0)
+  deadline: deadlineSchema.optional(),
+  /** 省略或 null 表示未报价；传 0 表示明确免费 */
+  quoteAmountCents: centsSchema.nullish()
 })
 export type CreateCommissionInput = z.infer<typeof createCommissionInputSchema>
 
-export const updateCommissionInputSchema = z.object({
+/** 更新委托输入。paymentStatus 不在其中，状态由主进程根据金额推导。 */
+export const updateCommissionInputSchema = z.strictObject({
   id: uuidSchema,
   title: nameSchema.optional(),
   description: longTextSchema.nullish(),
   type: z.string().trim().min(1).max(100).optional(),
   priority: prioritySchema.optional(),
-  deadlineAt: utcIsoSchema.nullish(),
-  quoteAmountCents: centsSchema.optional(),
+  deadline: deadlineSchema.optional(),
+  quoteAmountCents: centsSchema.nullish(),
   paidAmountCents: centsSchema.optional(),
-  paymentStatus: paymentStatusSchema.optional(),
   status: commissionStatusSchema.optional()
 })
 export type UpdateCommissionInput = z.infer<typeof updateCommissionInputSchema>
@@ -134,6 +171,7 @@ export type UpdateCommissionInput = z.infer<typeof updateCommissionInputSchema>
 export const listCommissionsInputSchema = z.object({
   clientId: uuidSchema.optional(),
   status: commissionStatusSchema.optional(),
+  paymentStatus: paymentStatusSchema.optional(),
   includeArchived: z.boolean().default(false)
 })
 export type ListCommissionsInput = z.infer<typeof listCommissionsInputSchema>

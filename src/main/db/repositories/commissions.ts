@@ -5,10 +5,18 @@ import {
   type Commission,
   type CommissionStatus,
   type CreateCommissionInput,
+  type Deadline,
   type ListCommissionsInput,
+  type PaymentStatus,
   type UpdateCommissionInput
 } from '@shared/domain'
 import { DataError } from '@shared/errors'
+import {
+  assertAmountConsistency,
+  derivePaymentStatus,
+  isSettledStatus,
+  outstandingCentsOf
+} from '@shared/payment'
 import type { AppDatabase } from '../database'
 
 const COLUMNS = [
@@ -19,7 +27,10 @@ const COLUMNS = [
   'type',
   'status',
   'priority',
+  'deadline_kind AS deadlineKind',
+  'deadline_date AS deadlineDate',
   'deadline_at AS deadlineAt',
+  'deadline_timezone AS deadlineTimeZone',
   'quote_amount_cents AS quoteAmountCents',
   'paid_amount_cents AS paidAmountCents',
   'payment_status AS paymentStatus',
@@ -36,11 +47,80 @@ export interface CommissionsRepository {
   archive(input: ByIdInput): Commission | null
 }
 
+function toNumber(value: unknown): number {
+  return typeof value === 'number' ? value : Number(value)
+}
+
+function toNullableNumber(value: unknown): number | null {
+  return value === null || value === undefined ? null : toNumber(value)
+}
+
+function toText(value: unknown): string {
+  return typeof value === 'string' ? value : String(value)
+}
+
+/** 把数据库行映射成对外契约对象（含派生的付款字段）。 */
+function rowToCommission(row: Record<string, unknown>): Commission {
+  const quote = toNullableNumber(row['quoteAmountCents'])
+  const paid = toNumber(row['paidAmountCents'])
+  const status = toText(row['paymentStatus']) as PaymentStatus
+
+  let deadline: Deadline
+  if (row['deadlineKind'] === 'date') {
+    deadline = { kind: 'date', date: toText(row['deadlineDate']) }
+  } else if (row['deadlineKind'] === 'datetime') {
+    deadline = {
+      kind: 'datetime',
+      at: toText(row['deadlineAt']),
+      timeZone: toText(row['deadlineTimeZone'])
+    }
+  } else {
+    deadline = { kind: 'none' }
+  }
+
+  return commissionSchema.parse({
+    id: toText(row['id']),
+    clientId: toText(row['clientId']),
+    title: toText(row['title']),
+    description: row['description'] === null || row['description'] === undefined ? null : toText(row['description']),
+    type: toText(row['type']),
+    status: toText(row['status']),
+    priority: toNumber(row['priority']),
+    deadline,
+    quoteAmountCents: quote,
+    paidAmountCents: paid,
+    paymentStatus: status,
+    outstandingCents: outstandingCentsOf(quote, paid),
+    isSettled: isSettledStatus(status),
+    createdAt: toText(row['createdAt']),
+    updatedAt: toText(row['updatedAt']),
+    archivedAt: row['archivedAt'] === null || row['archivedAt'] === undefined ? null : toText(row['archivedAt'])
+  })
+}
+
+/** 截止时间三态 → 四个列值。 */
+function deadlineColumns(deadline: Deadline): {
+  kind: string
+  date: string | null
+  at: string | null
+  timeZone: string | null
+} {
+  if (deadline.kind === 'date') {
+    return { kind: 'date', date: deadline.date, at: null, timeZone: null }
+  }
+  if (deadline.kind === 'datetime') {
+    return { kind: 'datetime', date: null, at: deadline.at, timeZone: deadline.timeZone }
+  }
+  return { kind: 'none', date: null, at: null, timeZone: null }
+}
+
 /** 委托仓储：只做 SQL 与映射，不依赖 Electron。 */
 export function createCommissionsRepository(db: AppDatabase): CommissionsRepository {
   function getById(id: string): Commission | null {
-    const row = db.prepare(`SELECT ${COLUMNS} FROM commissions WHERE id = ?`).get(id)
-    return row ? commissionSchema.parse(row) : null
+    const row = db.prepare(`SELECT ${COLUMNS} FROM commissions WHERE id = ?`).get(id) as
+      | Record<string, unknown>
+      | undefined
+    return row ? rowToCommission(row) : null
   }
 
   function assertClientUsable(clientId: string): void {
@@ -56,16 +136,26 @@ export function createCommissionsRepository(db: AppDatabase): CommissionsReposit
     create(input: CreateCommissionInput): Commission {
       assertClientUsable(input.clientId)
 
+      // 新建时尚未收款：金额组合必须是「未报价 / 免费 / 待付款」之一
+      const quote = input.quoteAmountCents ?? null
+      assertAmountConsistency(quote, 0)
+      const paymentStatus = derivePaymentStatus(quote, 0)
+      const deadline = deadlineColumns(input.deadline ?? { kind: 'none' })
+
       const id = randomUUID()
       const now = new Date().toISOString()
 
       db.prepare(
         `INSERT INTO commissions (
-           id, client_id, title, description, type, status, priority, deadline_at,
-           quote_amount_cents, paid_amount_cents, payment_status, created_at, updated_at, archived_at
+           id, client_id, title, description, type, status, priority,
+           deadline_kind, deadline_date, deadline_at, deadline_timezone,
+           quote_amount_cents, paid_amount_cents, payment_status,
+           created_at, updated_at, archived_at
          ) VALUES (
-           @id, @clientId, @title, @description, @type, @status, @priority, @deadlineAt,
-           @quoteAmountCents, 0, 'unpaid', @createdAt, @updatedAt, NULL
+           @id, @clientId, @title, @description, @type, 'draft', @priority,
+           @deadlineKind, @deadlineDate, @deadlineAt, @deadlineTimeZone,
+           @quoteAmountCents, 0, @paymentStatus,
+           @createdAt, @updatedAt, NULL
          )`
       ).run({
         id,
@@ -73,10 +163,13 @@ export function createCommissionsRepository(db: AppDatabase): CommissionsReposit
         title: input.title,
         description: input.description ?? null,
         type: input.type,
-        status: 'draft',
         priority: input.priority,
-        deadlineAt: input.deadlineAt ?? null,
-        quoteAmountCents: input.quoteAmountCents,
+        deadlineKind: deadline.kind,
+        deadlineDate: deadline.date,
+        deadlineAt: deadline.at,
+        deadlineTimeZone: deadline.timeZone,
+        quoteAmountCents: quote,
+        paymentStatus,
         createdAt: now,
         updatedAt: now
       })
@@ -99,12 +192,16 @@ export function createCommissionsRepository(db: AppDatabase): CommissionsReposit
         where.push('status = @status')
         params['status'] = input.status
       }
+      if (input.paymentStatus) {
+        where.push('payment_status = @paymentStatus')
+        params['paymentStatus'] = input.paymentStatus
+      }
 
       const sql = `SELECT ${COLUMNS} FROM commissions${
         where.length > 0 ? ` WHERE ${where.join(' AND ')}` : ''
       } ORDER BY datetime(created_at) DESC, id`
 
-      return (db.prepare(sql).all(params) as unknown[]).map((row) => commissionSchema.parse(row))
+      return (db.prepare(sql).all(params) as Array<Record<string, unknown>>).map(rowToCommission)
     },
 
     get(input: ByIdInput): Commission | null {
@@ -112,56 +209,83 @@ export function createCommissionsRepository(db: AppDatabase): CommissionsReposit
     },
 
     update(input: UpdateCommissionInput): Commission | null {
-      const existing = getById(input.id)
-      if (!existing) return null
+      // 读-改-写放在同一个事务里，避免金额与状态出现中间态
+      const run = db.transaction((patch: UpdateCommissionInput): Commission | null => {
+        const current = db.prepare(`SELECT ${COLUMNS} FROM commissions WHERE id = ?`).get(patch.id) as
+          | Record<string, unknown>
+          | undefined
+        if (!current) return null
 
-      const fields: string[] = []
-      const params: Record<string, unknown> = {
-        id: input.id,
-        updatedAt: new Date().toISOString()
-      }
+        const currentQuote = toNullableNumber(current['quoteAmountCents'])
+        const currentPaid = toNumber(current['paidAmountCents'])
 
-      if (input.title !== undefined) {
-        fields.push('title = @title')
-        params['title'] = input.title
-      }
-      if (input.description !== undefined) {
-        fields.push('description = @description')
-        params['description'] = input.description ?? null
-      }
-      if (input.type !== undefined) {
-        fields.push('type = @type')
-        params['type'] = input.type
-      }
-      if (input.priority !== undefined) {
-        fields.push('priority = @priority')
-        params['priority'] = input.priority
-      }
-      if (input.deadlineAt !== undefined) {
-        fields.push('deadline_at = @deadlineAt')
-        params['deadlineAt'] = input.deadlineAt ?? null
-      }
-      if (input.quoteAmountCents !== undefined) {
-        fields.push('quote_amount_cents = @quoteAmountCents')
-        params['quoteAmountCents'] = input.quoteAmountCents
-      }
-      if (input.paidAmountCents !== undefined) {
-        fields.push('paid_amount_cents = @paidAmountCents')
-        params['paidAmountCents'] = input.paidAmountCents
-      }
-      if (input.paymentStatus !== undefined) {
-        fields.push('payment_status = @paymentStatus')
-        params['paymentStatus'] = input.paymentStatus
-      }
-      if (input.status !== undefined) {
-        fields.push('status = @status')
-        params['status'] = input.status
-      }
+        const nextQuote = patch.quoteAmountCents === undefined ? currentQuote : patch.quoteAmountCents
+        const nextPaid = patch.paidAmountCents === undefined ? currentPaid : patch.paidAmountCents
 
-      if (fields.length === 0) return existing
+        assertAmountConsistency(nextQuote, nextPaid, {
+          quoteChanged: patch.quoteAmountCents !== undefined
+        })
+        const paymentStatus = derivePaymentStatus(nextQuote, nextPaid)
 
-      db.prepare(`UPDATE commissions SET ${fields.join(', ')}, updated_at = @updatedAt WHERE id = @id`).run(params)
-      return getById(input.id)
+        const fields: string[] = []
+        const params: Record<string, unknown> = { id: patch.id, updatedAt: new Date().toISOString() }
+
+        if (patch.title !== undefined) {
+          fields.push('title = @title')
+          params['title'] = patch.title
+        }
+        if (patch.description !== undefined) {
+          fields.push('description = @description')
+          params['description'] = patch.description ?? null
+        }
+        if (patch.type !== undefined) {
+          fields.push('type = @type')
+          params['type'] = patch.type
+        }
+        if (patch.priority !== undefined) {
+          fields.push('priority = @priority')
+          params['priority'] = patch.priority
+        }
+        if (patch.status !== undefined) {
+          fields.push('status = @status')
+          params['status'] = patch.status
+        }
+        if (patch.deadline !== undefined) {
+          const deadline = deadlineColumns(patch.deadline)
+          fields.push(
+            'deadline_kind = @deadlineKind',
+            'deadline_date = @deadlineDate',
+            'deadline_at = @deadlineAt',
+            'deadline_timezone = @deadlineTimeZone'
+          )
+          params['deadlineKind'] = deadline.kind
+          params['deadlineDate'] = deadline.date
+          params['deadlineAt'] = deadline.at
+          params['deadlineTimeZone'] = deadline.timeZone
+        }
+        if (patch.quoteAmountCents !== undefined) {
+          fields.push('quote_amount_cents = @quoteAmountCents')
+          params['quoteAmountCents'] = patch.quoteAmountCents
+        }
+        if (patch.paidAmountCents !== undefined) {
+          fields.push('paid_amount_cents = @paidAmountCents')
+          params['paidAmountCents'] = patch.paidAmountCents
+        }
+        // 付款状态永远由金额推导，不接受外部传入
+        if (patch.quoteAmountCents !== undefined || patch.paidAmountCents !== undefined) {
+          fields.push('payment_status = @paymentStatus')
+          params['paymentStatus'] = paymentStatus
+        }
+
+        if (fields.length === 0) return rowToCommission(current)
+
+        db.prepare(`UPDATE commissions SET ${fields.join(', ')}, updated_at = @updatedAt WHERE id = @id`).run(
+          params
+        )
+        return getById(patch.id)
+      })
+
+      return run(input)
     },
 
     archive(input: ByIdInput): Commission | null {

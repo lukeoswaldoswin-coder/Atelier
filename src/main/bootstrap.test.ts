@@ -162,10 +162,12 @@ describe('主进程启动流程', () => {
     const tables = probe
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
       .all() as Array<{ name: string }>
-    const migrations = probe.prepare('SELECT id FROM schema_migrations').all() as Array<{ id: string }>
+    const migrations = probe.prepare('SELECT id FROM schema_migrations ORDER BY id').all() as Array<{
+      id: string
+    }>
     probe.close()
     expect(tables.map((row) => row.name)).toEqual(['clients', 'commissions', 'schema_migrations'])
-    expect(migrations.map((row) => row.id)).toEqual(['001-initial'])
+    expect(migrations.map((row) => row.id)).toEqual(['001-initial', '002-deadline-and-payment'])
 
     // 数据相关通道均已注册
     expect(state.handlers.has(IpcChannel.appGetInfo)).toBe(true)

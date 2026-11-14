@@ -4,6 +4,8 @@ import {
   centsSchema,
   createClientInputSchema,
   createCommissionInputSchema,
+  deadlineSchema,
+  updateCommissionInputSchema,
   utcIsoSchema,
   uuidSchema
 } from '@shared/domain'
@@ -94,15 +96,79 @@ describe('客户输入契约', () => {
   })
 })
 
+describe('截止时间契约（三态）', () => {
+  it('接受无截止、仅日期、精确时刻三种形态', () => {
+    expect(deadlineSchema.parse({ kind: 'none' })).toEqual({ kind: 'none' })
+    expect(deadlineSchema.parse({ kind: 'date', date: '2026-12-31' })).toEqual({
+      kind: 'date',
+      date: '2026-12-31'
+    })
+    expect(
+      deadlineSchema.parse({
+        kind: 'datetime',
+        at: '2026-12-31T10:00:00.000Z',
+        timeZone: 'Asia/Shanghai'
+      })
+    ).toEqual({ kind: 'datetime', at: '2026-12-31T10:00:00.000Z', timeZone: 'Asia/Shanghai' })
+  })
+
+  it('日期型拒绝不存在的日历日期', () => {
+    expect(() => deadlineSchema.parse({ kind: 'date', date: '2026-02-30' })).toThrow()
+    expect(() => deadlineSchema.parse({ kind: 'date', date: '2026-13-01' })).toThrow()
+    expect(() => deadlineSchema.parse({ kind: 'date', date: '2026-12-31T00:00:00.000Z' })).toThrow()
+  })
+
+  it('时刻型要求 UTC 时间与合法 IANA 时区', () => {
+    expect(() =>
+      deadlineSchema.parse({ kind: 'datetime', at: '2026-12-31T10:00:00.000Z', timeZone: 'Mars/Base' })
+    ).toThrow()
+    expect(() =>
+      deadlineSchema.parse({ kind: 'datetime', at: '2026-12-31 10:00', timeZone: 'Asia/Shanghai' })
+    ).toThrow()
+    expect(() => deadlineSchema.parse({ kind: 'datetime', at: '2026-12-31T10:00:00.000Z' })).toThrow()
+  })
+
+  it('拒绝未知字段（strict）', () => {
+    expect(() => deadlineSchema.parse({ kind: 'none', date: '2026-12-31' })).toThrow()
+    expect(() =>
+      deadlineSchema.parse({
+        kind: 'datetime',
+        at: '2026-12-31T10:00:00.000Z',
+        timeZone: 'Asia/Shanghai',
+        extra: true
+      })
+    ).toThrow()
+  })
+})
+
 describe('委托输入契约', () => {
-  it('优先级默认 3、报价默认 0', () => {
+  it('优先级默认 3；报价省略即未报价', () => {
     const parsed = createCommissionInputSchema.parse({
       clientId: validUuid,
       title: '半身立绘',
       type: '插画'
     })
     expect(parsed.priority).toBe(3)
-    expect(parsed.quoteAmountCents).toBe(0)
+    expect(parsed.quoteAmountCents).toBeUndefined()
+  })
+
+  it('报价可以显式 null（未报价）或 0（免费）', () => {
+    expect(
+      createCommissionInputSchema.parse({
+        clientId: validUuid,
+        title: 'x',
+        type: 'y',
+        quoteAmountCents: null
+      }).quoteAmountCents
+    ).toBeNull()
+    expect(
+      createCommissionInputSchema.parse({
+        clientId: validUuid,
+        title: 'x',
+        type: 'y',
+        quoteAmountCents: 0
+      }).quoteAmountCents
+    ).toBe(0)
   })
 
   it('优先级超出 1–5 会被拒绝', () => {
@@ -114,17 +180,20 @@ describe('委托输入契约', () => {
     ).toThrow()
   })
 
-  it('截止时间必须是 UTC 时间，且不能为空字符串', () => {
-    expect(
+  it('拒绝未知字段，尤其是渲染进程提交 paymentStatus', () => {
+    expect(() =>
       createCommissionInputSchema.parse({
         clientId: validUuid,
         title: 'x',
         type: 'y',
-        deadlineAt: '2026-12-31T15:59:00.000Z'
-      }).deadlineAt
-    ).toBe('2026-12-31T15:59:00.000Z')
+        paymentStatus: 'paid'
+      })
+    ).toThrow()
     expect(() =>
-      createCommissionInputSchema.parse({ clientId: validUuid, title: 'x', type: 'y', deadlineAt: '' })
+      updateCommissionInputSchema.parse({ id: validUuid, paymentStatus: 'paid' })
+    ).toThrow()
+    expect(() =>
+      updateCommissionInputSchema.parse({ id: validUuid, unknownField: 1 })
     ).toThrow()
   })
 })
