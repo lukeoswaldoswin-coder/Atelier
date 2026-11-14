@@ -1,0 +1,142 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import type { Client, Commission } from '@shared/domain'
+import { makeClient, makeCommission } from '@/test-utils/fixtures'
+import { useCommissionsUiStore } from '@/stores/commissions-ui-store'
+import { CommissionsPage } from './commissions-page'
+
+type ListMock<T> = ReturnType<typeof vi.fn<() => Promise<T[]>>>
+
+function installApi(commissionList: ListMock<Commission>, clientList: ListMock<Client>) {
+  Object.defineProperty(window, 'atelier', {
+    configurable: true,
+    value: {
+      getAppInfo: vi.fn(),
+      clients: {
+        create: vi.fn(),
+        list: clientList,
+        get: vi.fn(),
+        update: vi.fn(),
+        archive: vi.fn()
+      },
+      commissions: {
+        create: vi.fn(),
+        list: commissionList,
+        get: vi.fn(),
+        update: vi.fn(),
+        archive: vi.fn()
+      }
+    }
+  })
+}
+
+beforeEach(() => {
+  useCommissionsUiStore.setState({ listScrollTop: 0, includeArchived: false })
+})
+
+afterEach(() => {
+  Reflect.deleteProperty(window, 'atelier')
+  vi.restoreAllMocks()
+})
+
+describe('委托列表页', () => {
+  it('展示真实数据：委托名为主、客户名为次，金额与付款状态正确', async () => {
+    const client = makeClient({ name: '小夏' })
+    const commission = makeCommission({
+      title: '半身立绘',
+      clientId: client.id,
+      status: 'active',
+      deadline: { kind: 'date', date: '2026-12-31' },
+      quoteAmountCents: 120000,
+      paidAmountCents: 40000,
+      paymentStatus: 'partial',
+      outstandingCents: 80000
+    })
+    installApi(vi.fn(async () => [commission]), vi.fn(async () => [client]))
+
+    render(<CommissionsPage />)
+
+    expect(await screen.findByText('半身立绘')).toBeInTheDocument()
+    expect(screen.getByText('小夏')).toBeInTheDocument()
+    expect(screen.getByText('进行中')).toBeInTheDocument()
+    expect(screen.getByText('2026-12-31')).toBeInTheDocument()
+    expect(screen.getByText('部分付款')).toBeInTheDocument()
+    expect(screen.getByText('已收 ¥400.00 · 未收 ¥800.00')).toBeInTheDocument()
+    expect(screen.getByTestId('commissions-summary')).toHaveTextContent('共 1 个委托 · 1 个未结清')
+  })
+
+  it('空数据库显示空状态，不显示任何示例数据', async () => {
+    installApi(vi.fn(async () => []), vi.fn(async () => []))
+
+    render(<CommissionsPage />)
+
+    expect(await screen.findByText('还没有委托')).toBeInTheDocument()
+    expect(screen.getByTestId('commissions-summary')).toHaveTextContent('共 0 个委托')
+    expect(screen.queryByTestId('commission-row')).not.toBeInTheDocument()
+  })
+
+  it('加载中显示骨架，而不是空状态', async () => {
+    installApi(
+      vi.fn(() => new Promise<Commission[]>(() => undefined)),
+      vi.fn(() => new Promise<Client[]>(() => undefined))
+    )
+
+    render(<CommissionsPage />)
+
+    expect(await screen.findByTestId('commission-loading')).toBeInTheDocument()
+    expect(screen.queryByText('还没有委托')).not.toBeInTheDocument()
+  })
+
+  it('IPC 失败时显示真实错误，并可重试成功', async () => {
+    const client = makeClient({ name: '小夏' })
+    const commission = makeCommission({ title: '重试成功', clientId: client.id })
+    const commissionList = vi
+      .fn<() => Promise<Commission[]>>()
+      .mockRejectedValueOnce(new Error('Error invoking remote method: 数据库不可用'))
+      .mockResolvedValueOnce([commission])
+
+    installApi(commissionList, vi.fn(async () => [client]))
+
+    render(<CommissionsPage />)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('无法读取委托列表')
+    expect(alert).toHaveTextContent('数据库不可用')
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: '重试' }))
+
+    expect(await screen.findByText('重试成功')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('客户已归档时，历史委托仍显示客户名称', async () => {
+    const client = makeClient({
+      name: '已归档客户',
+      archivedAt: '2026-06-01T00:00:00.000Z'
+    })
+    installApi(
+      vi.fn(async () => [makeCommission({ title: '历史委托', clientId: client.id })]),
+      vi.fn(async () => [client])
+    )
+
+    render(<CommissionsPage />)
+
+    expect(await screen.findByText('历史委托')).toBeInTheDocument()
+    expect(screen.getByText('已归档客户')).toBeInTheDocument()
+    expect(screen.queryByText('未知客户')).not.toBeInTheDocument()
+  })
+
+  it('客户数据读取失败时整体报错，而不是把客户名显示为未知', async () => {
+    installApi(vi.fn(async () => [makeCommission({ title: '委托' })]), vi.fn(async () => {
+      throw new Error('客户查询失败')
+    }))
+
+    render(<CommissionsPage />)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('客户查询失败')
+    expect(screen.queryByText('未知客户')).not.toBeInTheDocument()
+  })
+})

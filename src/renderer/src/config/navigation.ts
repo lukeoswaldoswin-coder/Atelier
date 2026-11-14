@@ -59,8 +59,8 @@ export const navGroups: readonly NavGroup[] = [
         label: '委托管理',
         description: '客户资料、需求说明、交稿日期、金额与付款状态。',
         icon: Users,
-        phase: 'P1',
-        implemented: false
+        phase: 'P1.2',
+        implemented: true
       },
       {
         id: 'workflow',

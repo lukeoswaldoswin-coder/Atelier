@@ -19,7 +19,7 @@ export function Sidebar() {
         </span>
         <span className="text-sm font-semibold tracking-tight">Atelier</span>
         <span className="ml-auto rounded border border-sidebar-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-          P0
+          P1
         </span>
       </div>
 
