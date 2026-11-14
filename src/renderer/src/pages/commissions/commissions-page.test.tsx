@@ -32,6 +32,14 @@ function installApi(commissionList: ListMock<Commission>, clientList: ListMock<C
         get: vi.fn(),
         update: actions.update ?? vi.fn(),
         archive: vi.fn()
+      },
+      tasks: {
+        create: vi.fn(),
+        list: vi.fn(async () => []),
+        update: vi.fn(),
+        reorder: vi.fn(),
+        archive: vi.fn(),
+        unarchive: vi.fn()
       }
     }
   })

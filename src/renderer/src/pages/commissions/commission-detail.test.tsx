@@ -31,6 +31,14 @@ function installApi(overrides: { update?: UpdateMock } = {}) {
         update,
         archive,
         unarchive
+      },
+      tasks: {
+        create: vi.fn(),
+        list: vi.fn(async () => []),
+        update: vi.fn(),
+        reorder: vi.fn(),
+        archive: vi.fn(),
+        unarchive: vi.fn()
       }
     }
   })

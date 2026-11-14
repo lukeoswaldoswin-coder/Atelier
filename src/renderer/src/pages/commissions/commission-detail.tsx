@@ -23,6 +23,7 @@ import {
 import { formatIpcError } from '@/lib/ipc-error'
 import { PARSE_YUAN_ERROR_MESSAGES, centsToYuanInput, parseYuanToCents } from '@/lib/money'
 import { formatYuanFromCents } from '@/lib/format'
+import { CommissionTasks } from './commission-tasks'
 
 const STATUS_BADGE: Record<CommissionStatus, 'muted' | 'default' | 'success' | 'outline'> = {
   draft: 'muted',
@@ -235,6 +236,8 @@ export function CommissionDetail({
               {commission.description && commission.description.length > 0 ? commission.description : '未填写'}
             </p>
           </section>
+
+          <CommissionTasks commissionId={commission.id} onChanged={onChanged} />
 
           <section className="flex flex-col gap-2 border-t border-border/60 pt-4">
             <h3 className="text-xs font-medium text-muted-foreground">付款</h3>
