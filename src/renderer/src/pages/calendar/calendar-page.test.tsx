@@ -1,9 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { CalendarDeadline, CalendarTask, CalendarTasksOutput } from '@shared/domain'
 import { makeTask } from '@/test-utils/fixtures'
 import { EMPTY_CALENDAR } from '@/data/calendar'
+import { useCommissionsUiStore } from '@/stores/commissions-ui-store'
+import { useNavigationStore } from '@/stores/navigation-store'
 import { CalendarPage } from './calendar-page'
 
 const COMMISSION = {
@@ -50,15 +52,24 @@ function payload(overrides: Partial<CalendarTasksOutput> = {}): CalendarTasksOut
   }
 }
 
-function installApi(tasks = vi.fn(async () => payload())) {
+function installApi(
+  tasks = vi.fn(async () => payload()),
+  update = vi.fn(async () => null)
+) {
   Object.defineProperty(window, 'atelier', {
     configurable: true,
     value: {
-      calendar: { tasks }
+      calendar: { tasks },
+      tasks: { update }
     }
   })
-  return { tasks }
+  return { tasks, update }
 }
+
+beforeEach(() => {
+  useNavigationStore.setState({ active: 'dashboard' })
+  useCommissionsUiStore.setState({ tab: 'commissions', selectedId: null })
+})
 
 afterEach(() => {
   document.body.style.pointerEvents = ''
@@ -157,7 +168,7 @@ describe('日历页：周视图与未安排', () => {
 
     const sheet = await screen.findByTestId('sheet')
     expect(within(sheet).getByText('还没排的任务')).toBeInTheDocument()
-    expect(within(sheet).getByText('未安排')).toBeInTheDocument()
+    expect(within(sheet).getByLabelText('计划日期')).toHaveValue('')
 
     await user.click(within(sheet).getByRole('button', { name: '关闭' }))
     await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument())
@@ -169,6 +180,102 @@ describe('日历页：周视图与未安排', () => {
 
     await waitFor(() => expect(screen.getByTestId('calendar-summary')).toHaveTextContent('0 个任务 · 0 个截止'))
     expect(screen.getByText('没有未安排的任务')).toBeInTheDocument()
+  })
+})
+
+describe('日历页：手动排期', () => {
+  it('从未安排任务安排日期，保存后刷新并关闭面板', async () => {
+    const unscheduled = taskItem('33333333-3333-4333-8333-333333333333', '待安排', null)
+    const tasks = vi.fn(async () => payload({ scheduled: [], deadlines: [], unscheduled: [unscheduled] }))
+    const { update } = installApi(tasks)
+    const user = userEvent.setup()
+    renderCalendar()
+
+    await user.click(await screen.findByTestId('unscheduled-item'))
+    fireEvent.change(screen.getByLabelText('计划日期'), { target: { value: '2026-03-05' } })
+    await user.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith({
+        id: unscheduled.task.id,
+        plannedDate: '2026-03-05'
+      })
+    )
+    await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument())
+    expect(tasks.mock.calls.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('修改已有计划日期', async () => {
+    const item = taskItem('11111111-1111-4111-8111-111111111111', '构图草稿', '2026-03-02')
+    const { update } = installApi(vi.fn(async () => payload({ scheduled: [item] })))
+    const user = userEvent.setup()
+    renderCalendar()
+
+    await user.click(await screen.findByTestId('calendar-task'))
+    const input = screen.getByLabelText('计划日期')
+    expect(input).toHaveValue('2026-03-02')
+
+    fireEvent.change(input, { target: { value: '2026-03-06' } })
+    await user.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith({ id: item.task.id, plannedDate: '2026-03-06' })
+    )
+  })
+
+  it('清除计划日期后从日历移除', async () => {
+    const item = taskItem('11111111-1111-4111-8111-111111111111', '构图草稿', '2026-03-02')
+    const { update } = installApi(vi.fn(async () => payload({ scheduled: [item] })))
+    const user = userEvent.setup()
+    renderCalendar()
+
+    await user.click(await screen.findByTestId('calendar-task'))
+    await user.click(screen.getByRole('button', { name: '清除计划' }))
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith({ id: item.task.id, plannedDate: null })
+    )
+  })
+
+  it('查看委托会跳到委托详情', async () => {
+    const item = taskItem('11111111-1111-4111-8111-111111111111', '构图草稿', '2026-03-02')
+    installApi(vi.fn(async () => payload({ scheduled: [item] })))
+    const user = userEvent.setup()
+    renderCalendar()
+
+    await user.click(await screen.findByTestId('calendar-task'))
+    await user.click(screen.getByRole('button', { name: '查看委托' }))
+
+    expect(useNavigationStore.getState().active).toBe('commissions')
+    expect(useCommissionsUiStore.getState().selectedId).toBe(COMMISSION.id)
+    await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument())
+  })
+
+  it('过去日期给出补录提示', async () => {
+    const item = taskItem('11111111-1111-4111-8111-111111111111', '构图草稿', '2026-03-02')
+    installApi(vi.fn(async () => payload({ scheduled: [item] })))
+    const user = userEvent.setup()
+    renderCalendar()
+
+    await user.click(await screen.findByTestId('calendar-task'))
+    expect(screen.getByText('这是过去日期，仅用于补录。')).toBeInTheDocument()
+  })
+
+  it('保存失败显示可读错误并保持面板打开', async () => {
+    const item = taskItem('11111111-1111-4111-8111-111111111111', '构图草稿', '2026-03-02')
+    const update = vi.fn(async () => {
+      throw new Error("Error invoking remote method 'tasks:update': Error: 计划日期无效")
+    })
+    installApi(vi.fn(async () => payload({ scheduled: [item] })), update)
+    const user = userEvent.setup()
+    renderCalendar()
+
+    await user.click(await screen.findByTestId('calendar-task'))
+    fireEvent.change(screen.getByLabelText('计划日期'), { target: { value: '2026-03-06' } })
+    await user.click(screen.getByRole('button', { name: '保存' }))
+
+    expect(await screen.findByText('计划日期无效')).toBeInTheDocument()
+    expect(screen.getByTestId('sheet')).toBeInTheDocument()
   })
 })
 

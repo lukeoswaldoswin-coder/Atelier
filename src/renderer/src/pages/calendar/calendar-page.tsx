@@ -6,7 +6,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { useCalendarTasks } from '@/data/calendar'
 import { addDays, addMonths, formatMonthTitle, formatWeekTitle, monthGrid, weekDates } from '@/lib/calendar'
 import { MonthView, WeekView } from './calendar-views'
-import { TaskDetailSheet } from './task-detail-sheet'
+import { TaskScheduleSheet } from './task-schedule-sheet'
 import { UnscheduledPanel } from './unscheduled-panel'
 
 type ViewMode = 'month' | 'week'
@@ -139,7 +139,15 @@ export function CalendarPage({ today: todayProp, initialDate }: CalendarPageProp
         <UnscheduledPanel items={calendar.data.unscheduled} onOpen={setSelected} />
       </div>
 
-      <TaskDetailSheet item={selected} onClose={() => setSelected(null)} />
+      {selected ? (
+        <TaskScheduleSheet
+          key={selected.task.id}
+          item={selected}
+          today={today}
+          onClose={() => setSelected(null)}
+          onSaved={() => calendar.reload()}
+        />
+      ) : null}
     </div>
   )
 }
