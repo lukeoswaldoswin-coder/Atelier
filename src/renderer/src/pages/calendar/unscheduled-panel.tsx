@@ -12,7 +12,7 @@ export function UnscheduledPanel({
   onOpen: (item: CalendarTask) => void
 }) {
   return (
-    <aside className="flex w-72 shrink-0 flex-col gap-2" data-testid="unscheduled-panel">
+    <div className="flex min-h-0 flex-1 flex-col gap-2" data-testid="unscheduled-panel">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium">未安排任务</h2>
         <Badge variant="muted">{items.length}</Badge>
@@ -46,6 +46,6 @@ export function UnscheduledPanel({
           </button>
         ))}
       </div>
-    </aside>
+    </div>
   )
 }

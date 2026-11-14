@@ -6,14 +6,21 @@ import { Segmented } from '@/components/ui/segmented'
 import { useCalendarTasks } from '@/data/calendar'
 import { addDays, addMonths, formatMonthTitle, formatWeekTitle, monthGrid, weekDates } from '@/lib/calendar'
 import { MonthView, WeekView } from './calendar-views'
+import { ScheduleSuggestionsPanel } from './schedule-suggestions-panel'
 import { TaskScheduleSheet } from './task-schedule-sheet'
 import { UnscheduledPanel } from './unscheduled-panel'
 
 type ViewMode = 'month' | 'week'
+type SideTab = 'unscheduled' | 'suggestions'
 
 const VIEW_OPTIONS = [
   { value: 'month' as const, label: '月' },
   { value: 'week' as const, label: '周' }
+]
+
+const SIDE_OPTIONS = [
+  { value: 'unscheduled' as const, label: '未安排' },
+  { value: 'suggestions' as const, label: '排期建议' }
 ]
 
 interface CalendarPageProps {
@@ -27,6 +34,7 @@ export function CalendarPage({ today: todayProp, initialDate }: CalendarPageProp
   const today = useMemo(() => todayProp ?? todayInZone(resolveSystemTimeZone()), [todayProp])
   const [anchor, setAnchor] = useState(initialDate ?? today)
   const [view, setView] = useState<ViewMode>('month')
+  const [sideTab, setSideTab] = useState<SideTab>('unscheduled')
   const [selected, setSelected] = useState<CalendarTask | null>(null)
 
   const dates = useMemo(
@@ -136,7 +144,24 @@ export function CalendarPage({ today: todayProp, initialDate }: CalendarPageProp
           )}
         </div>
 
-        <UnscheduledPanel items={calendar.data.unscheduled} onOpen={setSelected} />
+        <aside className="flex w-80 shrink-0 flex-col gap-2">
+          <Segmented
+            ariaLabel="日历侧栏"
+            value={sideTab}
+            options={SIDE_OPTIONS}
+            onChange={(next) => setSideTab(next)}
+          />
+          {sideTab === 'unscheduled' ? (
+            <UnscheduledPanel items={calendar.data.unscheduled} onOpen={setSelected} />
+          ) : (
+            <ScheduleSuggestionsPanel
+              items={calendar.data.unscheduled}
+              today={today}
+              onOpen={setSelected}
+              onApplied={() => calendar.reload()}
+            />
+          )}
+        </aside>
       </div>
 
       {selected ? (

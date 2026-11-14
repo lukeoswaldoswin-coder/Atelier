@@ -174,6 +174,25 @@ describe('日历页：周视图与未安排', () => {
     await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument())
   })
 
+  it('切换到排期建议页签并显示未安排任务的建议', async () => {
+    const unscheduled = taskItem('33333333-3333-4333-8333-333333333333', '还没排的任务', null)
+    installApi(
+      vi.fn(async () => payload({ scheduled: [], deadlines: [], unscheduled: [unscheduled] }))
+    )
+    const user = userEvent.setup()
+    renderCalendar()
+
+    await user.click(await screen.findByRole('radio', { name: '排期建议' }))
+
+    expect(screen.getByTestId('schedule-suggestions-panel')).toBeInTheDocument()
+    expect(screen.getByTestId('schedule-suggestion')).toHaveTextContent('还没排的任务')
+    expect(screen.getByTestId('schedule-suggestion')).toHaveTextContent('已逾期 5 天')
+    expect(screen.queryByTestId('unscheduled-panel')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: '未安排' }))
+    expect(screen.getByTestId('unscheduled-panel')).toBeInTheDocument()
+  })
+
   it('周视图在对应日期显示任务与截止，时刻型截止带创建时区时间', async () => {
     const item = taskItem('44444444-4444-4444-8444-444444444444', '周任务', '2026-03-11')
     const deadline: CalendarDeadline = {
