@@ -9,3 +9,13 @@ export function createCommission(input: CreateCommissionInput): Promise<Commissi
 export function updateCommission(input: UpdateCommissionInput): Promise<Commission | null> {
   return getAtelierApi().commissions.update(input)
 }
+
+/** 归档（软删除）。 */
+export function archiveCommission(id: string): Promise<Commission | null> {
+  return getAtelierApi().commissions.archive({ id })
+}
+
+/** 取消归档。 */
+export function unarchiveCommission(id: string): Promise<Commission | null> {
+  return getAtelierApi().commissions.unarchive({ id })
+}

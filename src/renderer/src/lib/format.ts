@@ -1,4 +1,6 @@
-import type { Client, Commission, CommissionStatus, Deadline, PaymentStatus } from '@shared/domain'
+import type { Client, Commission, Deadline, PaymentStatus } from '@shared/domain'
+import { COMMISSION_STATUS_LABELS } from '@shared/status'
+import type { CommissionStatus } from '@shared/domain'
 import { formatDateTimeInZone } from '@shared/time'
 
 /**
@@ -45,12 +47,7 @@ export function formatDeadline(deadline: Deadline): string {
   return '—'
 }
 
-export const COMMISSION_STATUS_LABELS: Record<CommissionStatus, string> = {
-  draft: '草稿',
-  active: '进行中',
-  completed: '已完成',
-  cancelled: '已取消'
-}
+export { COMMISSION_STATUS_LABELS }
 
 export function statusLabel(status: CommissionStatus): string {
   return COMMISSION_STATUS_LABELS[status]

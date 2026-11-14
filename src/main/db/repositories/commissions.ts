@@ -12,6 +12,10 @@ import {
 } from '@shared/domain'
 import { DataError } from '@shared/errors'
 import {
+  COMMISSION_STATUS_LABELS,
+  canTransitionCommissionStatus
+} from '@shared/status'
+import {
   assertAmountConsistency,
   derivePaymentStatus,
   isSettledStatus,
@@ -45,6 +49,8 @@ export interface CommissionsRepository {
   get(input: ByIdInput): Commission | null
   update(input: UpdateCommissionInput): Commission | null
   archive(input: ByIdInput): Commission | null
+  /** 取消归档：恢复为正常委托。幂等。 */
+  unarchive(input: ByIdInput): Commission | null
 }
 
 function toNumber(value: unknown): number {
@@ -218,6 +224,15 @@ export function createCommissionsRepository(db: AppDatabase): CommissionsReposit
 
         const currentQuote = toNullableNumber(current['quoteAmountCents'])
         const currentPaid = toNumber(current['paidAmountCents'])
+        const currentStatus = toText(current['status']) as CommissionStatus
+
+        // 状态流转必须符合约定，不允许跳步或回退到不存在的关系
+        if (patch.status !== undefined && !canTransitionCommissionStatus(currentStatus, patch.status)) {
+          throw new DataError(
+            'INVALID_STATUS_TRANSITION',
+            `不能从「${COMMISSION_STATUS_LABELS[currentStatus]}」直接变更为「${COMMISSION_STATUS_LABELS[patch.status]}」`
+          )
+        }
 
         const nextQuote = patch.quoteAmountCents === undefined ? currentQuote : patch.quoteAmountCents
         const nextPaid = patch.paidAmountCents === undefined ? currentPaid : patch.paidAmountCents
@@ -295,6 +310,20 @@ export function createCommissionsRepository(db: AppDatabase): CommissionsReposit
 
       const now = new Date().toISOString()
       db.prepare('UPDATE commissions SET archived_at = @now, updated_at = @now WHERE id = @id').run({
+        id: input.id,
+        now
+      })
+      return getById(input.id)
+    },
+
+    unarchive(input: ByIdInput): Commission | null {
+      const existing = getById(input.id)
+      if (!existing) return null
+      // 未归档时直接返回，避免无意义地刷新 updated_at
+      if (existing.archivedAt === null) return existing
+
+      const now = new Date().toISOString()
+      db.prepare('UPDATE commissions SET archived_at = NULL, updated_at = @now WHERE id = @id').run({
         id: input.id,
         now
       })

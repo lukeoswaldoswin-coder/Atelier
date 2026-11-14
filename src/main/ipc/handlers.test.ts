@@ -217,6 +217,41 @@ describe('createIpcHandlers', () => {
     db.close()
   })
 
+  it('commissions:unarchive 恢复归档委托', async () => {
+    const { handlers, db } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+    const commission = (await handlers[IpcChannel.commissionsCreate]({
+      clientId: client.id,
+      title: '会归档',
+      type: '插画'
+    })) as Commission
+
+    await handlers[IpcChannel.commissionsArchive]({ id: commission.id })
+    expect((await handlers[IpcChannel.commissionsList]({})) as Commission[]).toHaveLength(0)
+
+    const restored = (await handlers[IpcChannel.commissionsUnarchive]({
+      id: commission.id
+    })) as Commission
+    expect(restored.archivedAt).toBeNull()
+    expect((await handlers[IpcChannel.commissionsList]({})) as Commission[]).toHaveLength(1)
+    db.close()
+  })
+
+  it('状态跳步时返回可读错误', async () => {
+    const { handlers, db } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+    const commission = (await handlers[IpcChannel.commissionsCreate]({
+      clientId: client.id,
+      title: 'x',
+      type: 'y'
+    })) as Commission
+
+    await expect(
+      handlers[IpcChannel.commissionsUpdate]({ id: commission.id, status: 'completed' })
+    ).rejects.toThrow(/不能从「草稿」直接变更为「已完成」/)
+    db.close()
+  })
+
   it('输出不符合契约时不会把脏数据交给渲染进程', async () => {
     const dirtyClients = {
       create: () => ({ id: 'not-a-uuid' }),

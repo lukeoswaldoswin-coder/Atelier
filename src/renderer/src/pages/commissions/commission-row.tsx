@@ -47,7 +47,10 @@ export function CommissionRow({
       data-testid="commission-row"
     >
       <span className="min-w-0">
-        <span className="block truncate text-sm font-medium text-foreground">{commission.title}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-medium text-foreground">{commission.title}</span>
+          {commission.archivedAt !== null ? <Badge variant="outline">已归档</Badge> : null}
+        </span>
         <span className="block truncate text-xs text-muted-foreground">
           {clientNameOf(commission, clientsById)}
         </span>

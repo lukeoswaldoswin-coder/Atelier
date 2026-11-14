@@ -38,5 +38,6 @@ export interface AtelierApi {
     get(input: ByIdInput): Promise<Commission | null>
     update(input: UpdateCommissionInput): Promise<Commission | null>
     archive(input: ByIdInput): Promise<Commission | null>
+    unarchive(input: ByIdInput): Promise<Commission | null>
   }
 }

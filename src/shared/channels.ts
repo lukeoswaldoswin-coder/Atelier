@@ -16,7 +16,8 @@ export const IpcChannel = {
   commissionsList: 'commissions:list',
   commissionsGet: 'commissions:get',
   commissionsUpdate: 'commissions:update',
-  commissionsArchive: 'commissions:archive'
+  commissionsArchive: 'commissions:archive',
+  commissionsUnarchive: 'commissions:unarchive'
 } as const
 
 export type IpcChannelName = (typeof IpcChannel)[keyof typeof IpcChannel]

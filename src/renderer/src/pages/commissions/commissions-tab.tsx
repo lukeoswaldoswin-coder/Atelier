@@ -1,12 +1,15 @@
-import { useCallback, useMemo, useState, type UIEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type UIEvent } from 'react'
 import type { Commission } from '@shared/domain'
 import { Plus } from 'lucide-react'
 import { resolveSystemTimeZone, todayInZone } from '@shared/time'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { useClients } from '@/data/clients'
 import { useCommissions } from '@/data/commissions'
 import { applyCommissionQuery, type QueryContext } from '@/lib/commission-query'
 import { useCommissionsUiStore } from '@/stores/commissions-ui-store'
+import { CommissionDetail } from './commission-detail'
 import { CommissionSheet } from './commission-sheet'
 import { CommissionsList } from './commission-list'
 
@@ -15,14 +18,16 @@ type EditorState = { mode: 'create' } | { mode: 'edit'; commission: Commission }
 /**
  * 委托页签。
  *
- * 数据全部来自真实 IPC：
- * - commissions:list 读取委托；
- * - clients:list（包含已归档客户）用于解析客户名称，避免历史委托显示空白。
- *
- * 新建/编辑使用右侧 420px 面板；客户下拉只包含未归档客户。
+ * - 点击行打开详情（P1.2.4），详情里再进入编辑；
+ * - 详情内容由列表数据推导，编辑/付款/状态变更后刷新列表即可即时更新；
+ * - 「显示已归档」控制是否包含归档委托；
+ * - 客户下拉只包含未归档客户。
  */
 export function CommissionsTab() {
   const includeArchived = useCommissionsUiStore((state) => state.includeArchived)
+  const setIncludeArchived = useCommissionsUiStore((state) => state.setIncludeArchived)
+  const selectedId = useCommissionsUiStore((state) => state.selectedId)
+  const setSelectedId = useCommissionsUiStore((state) => state.setSelectedId)
   const query = useCommissionsUiStore((state) => state.query)
   const setListScrollTop = useCommissionsUiStore((state) => state.setListScrollTop)
 
@@ -36,7 +41,6 @@ export function CommissionsTab() {
     [clients.rows]
   )
 
-  // 新建委托时只能选择未归档客户
   const selectableClients = useMemo(
     () => clients.rows.filter((client) => client.archivedAt === null),
     [clients.rows]
@@ -44,7 +48,6 @@ export function CommissionsTab() {
 
   const systemTimeZone = useMemo(() => resolveSystemTimeZone(), [])
 
-  // 当前时间只在数据变化时取一次，传给纯函数；渲染过程中不产生新的时间依赖
   const context = useMemo<QueryContext>(
     () => ({
       nowMs: Date.now(),
@@ -57,6 +60,18 @@ export function CommissionsTab() {
     () => applyCommissionQuery(commissions.rows, clientsById, query, context),
     [commissions.rows, clientsById, query, context]
   )
+
+  const selected = useMemo(
+    () => commissions.rows.find((commission) => commission.id === selectedId) ?? null,
+    [commissions.rows, selectedId]
+  )
+
+  // 选中的委托被归档隐藏（例如关闭「显示已归档」）时，关闭详情
+  useEffect(() => {
+    if (selectedId && commissions.status === 'ready' && selected === null) {
+      setSelectedId(null)
+    }
+  }, [selectedId, selected, commissions.status, setSelectedId])
 
   const status =
     commissions.status === 'error' || clients.status === 'error'
@@ -90,7 +105,6 @@ export function CommissionsTab() {
     [setListScrollTop]
   )
 
-  // 从别的页面/页签切回来时恢复滚动位置
   const restoreScroll = useCallback((node: HTMLDivElement | null) => {
     if (node) node.scrollTop = useCommissionsUiStore.getState().listScrollTop
   }, [])
@@ -102,10 +116,23 @@ export function CommissionsTab() {
           {summary}
         </p>
 
-        <Button size="sm" onClick={() => setEditor({ mode: 'create' })}>
-          <Plus className="size-4" aria-hidden="true" />
-          新建委托
-        </Button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="commissions-show-archived"
+              checked={includeArchived}
+              onCheckedChange={setIncludeArchived}
+            />
+            <Label htmlFor="commissions-show-archived" className="cursor-pointer">
+              显示已归档
+            </Label>
+          </div>
+
+          <Button size="sm" onClick={() => setEditor({ mode: 'create' })}>
+            <Plus className="size-4" aria-hidden="true" />
+            新建委托
+          </Button>
+        </div>
       </div>
 
       <div
@@ -122,9 +149,20 @@ export function CommissionsTab() {
           clientsById={clientsById}
           context={context}
           onRetry={reload}
-          onSelect={(commission) => setEditor({ mode: 'edit', commission })}
+          onSelect={(commission) => setSelectedId(commission.id)}
         />
       </div>
+
+      {selected && editor === null ? (
+        <CommissionDetail
+          commission={selected}
+          clientName={clientsById.get(selected.clientId)?.name ?? '未知客户'}
+          onClose={() => setSelectedId(null)}
+          onEdit={() => setEditor({ mode: 'edit', commission: selected })}
+          onChanged={() => commissions.reload()}
+          onArchived={() => setSelectedId(null)}
+        />
+      ) : null}
 
       {editor ? (
         <CommissionSheet

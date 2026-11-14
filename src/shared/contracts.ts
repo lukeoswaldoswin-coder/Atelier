@@ -92,6 +92,10 @@ export const ipcContracts = {
   [IpcChannel.commissionsArchive]: {
     input: byIdInputSchema,
     output: commissionSchema.nullable()
+  },
+  [IpcChannel.commissionsUnarchive]: {
+    input: byIdInputSchema,
+    output: commissionSchema.nullable()
   }
 } as const
 

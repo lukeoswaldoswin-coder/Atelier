@@ -174,6 +174,7 @@ describe('主进程启动流程', () => {
     expect(state.handlers.has(IpcChannel.clientsCreate)).toBe(true)
     expect(state.handlers.has(IpcChannel.clientsUnarchive)).toBe(true)
     expect(state.handlers.has(IpcChannel.commissionsCreate)).toBe(true)
+    expect(state.handlers.has(IpcChannel.commissionsUnarchive)).toBe(true)
 
     const win = state.windows[0] as WindowLike
     const webPreferences = win.options.webPreferences

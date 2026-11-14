@@ -200,4 +200,46 @@ describe('委托列表页', () => {
     expect(within(select).getByRole('option', { name: '小夏' })).toBeInTheDocument()
     expect(within(select).queryByRole('option', { name: '已归档客户' })).not.toBeInTheDocument()
   })
+
+  it('点击委托行打开详情，编辑保存后详情即时更新', async () => {
+    const client = makeClient({ name: '小夏' })
+    let current = makeCommission({
+      title: '旧标题',
+      clientId: client.id,
+      status: 'active',
+      quoteAmountCents: 128000,
+      outstandingCents: 128000
+    })
+    const commissionList = vi.fn(async () => [current])
+    const update = vi.fn(async (patch: Record<string, unknown>) => {
+      current = { ...current, ...patch } as Commission
+      return current
+    })
+
+    installApi(commissionList, vi.fn(async () => [client]), { update })
+
+    const user = userEvent.setup()
+    render(<CommissionsPage />)
+
+    await user.click(await screen.findByTestId('commission-row'))
+
+    const detail = await screen.findByTestId('sheet')
+    expect(within(detail).getByText('旧标题')).toBeInTheDocument()
+    expect(within(detail).getByText('未付款')).toBeInTheDocument()
+
+    await user.click(within(detail).getByRole('button', { name: '编辑' }))
+
+    const editor = await screen.findByTestId('sheet')
+    const titleInput = within(editor).getByLabelText('委托名称 *')
+    await user.clear(titleInput)
+    await user.type(titleInput, '新标题')
+    await user.click(within(editor).getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalled())
+
+    await waitFor(() => {
+      const sheet = screen.getByTestId('sheet')
+      expect(within(sheet).getByText('新标题')).toBeInTheDocument()
+    })
+  })
 })
