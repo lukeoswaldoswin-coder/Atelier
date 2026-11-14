@@ -1,8 +1,6 @@
 import {
   CalendarDays,
-  GitBranch,
   LayoutDashboard,
-  ListTodo,
   Settings,
   Timer,
   Users,
@@ -10,14 +8,7 @@ import {
 } from 'lucide-react'
 
 /** 侧边栏路由标识。新增页面时必须在这里登记，App 才能渲染对应内容。 */
-export type RouteId =
-  | 'dashboard'
-  | 'commissions'
-  | 'workflow'
-  | 'tasks'
-  | 'calendar'
-  | 'time'
-  | 'settings'
+export type RouteId = 'dashboard' | 'commissions' | 'calendar' | 'time' | 'settings'
 
 export interface NavItem {
   id: RouteId
@@ -61,22 +52,6 @@ export const navGroups: readonly NavGroup[] = [
         icon: Users,
         phase: 'P1.2',
         implemented: true
-      },
-      {
-        id: 'workflow',
-        label: '工作流程',
-        description: '流程模板、阶段顺序，以及每个委托独立的流程副本。',
-        icon: GitBranch,
-        phase: 'P2',
-        implemented: false
-      },
-      {
-        id: 'tasks',
-        label: '绘画任务',
-        description: '预计工时、剩余工时、任务状态与依赖关系。',
-        icon: ListTodo,
-        phase: 'P2',
-        implemented: false
       }
     ]
   },
@@ -87,7 +62,7 @@ export const navGroups: readonly NavGroup[] = [
       {
         id: 'calendar',
         label: '日历',
-        description: '月视图 / 周视图、日期模式与小时模式、拖拽调整。',
+        description: '月视图 / 周视图、任务计划日期与委托截止日期。',
         icon: CalendarDays,
         phase: 'P3',
         implemented: false
@@ -95,7 +70,7 @@ export const navGroups: readonly NavGroup[] = [
       {
         id: 'time',
         label: '工时记录',
-        description: '计时、手动补录，以及预计工时与实际工时的对比。',
+        description: '计时、暂停、手动补录，以及预计工时与实际工时的对比。',
         icon: Timer,
         phase: 'P4',
         implemented: false
@@ -109,7 +84,7 @@ export const navGroups: readonly NavGroup[] = [
       {
         id: 'settings',
         label: '设置',
-        description: '绘画容量、可绘画时间窗口、主题，以及数据备份与恢复。',
+        description: '主题，以及数据备份、恢复与导出。',
         icon: Settings,
         phase: 'P6',
         implemented: false
