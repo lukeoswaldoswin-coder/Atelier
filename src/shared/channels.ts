@@ -26,7 +26,20 @@ export const IpcChannel = {
   tasksArchive: 'tasks:archive',
   tasksUnarchive: 'tasks:unarchive',
 
-  calendarTasks: 'calendar:tasks'
+  calendarTasks: 'calendar:tasks',
+
+  timeStatus: 'time:status',
+  timeStart: 'time:start',
+  timePause: 'time:pause',
+  timeResume: 'time:resume',
+  timeStop: 'time:stop',
+  timeList: 'time:list',
+  timeSummary: 'time:summary',
+  timeUpdate: 'time:update',
+  timeAssign: 'time:assign',
+  timeDelete: 'time:delete',
+  timeMerge: 'time:merge',
+  timeTaskTotals: 'time:task-totals'
 } as const
 
 export type IpcChannelName = (typeof IpcChannel)[keyof typeof IpcChannel]

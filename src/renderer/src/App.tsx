@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { AppShell, type AppShellLayout } from '@/components/layout/app-shell'
 import type { NavItem } from '@/config/navigation'
 import { routeMap } from '@/config/navigation'
+import { useTimePolling } from '@/data/time-polling'
 import { applyTheme } from '@/lib/theme'
 import { ComingSoonPage } from '@/pages/coming-soon-page'
 import { CalendarPage } from '@/pages/calendar/calendar-page'
@@ -32,6 +33,8 @@ export default function App() {
   useEffect(() => {
     applyTheme(theme)
   }, [theme])
+
+  useTimePolling()
 
   return (
     <AppShell route={route} layout={layout}>

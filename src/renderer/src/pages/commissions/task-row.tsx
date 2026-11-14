@@ -1,14 +1,18 @@
 import type { Task } from '@shared/domain'
 import { TASK_STAGE_LABELS, TASK_STATUS_LABELS } from '@shared/tasks'
+import { formatClock, formatDuration } from '@shared/time-entries'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useLiveElapsedSeconds } from '@/data/time-polling'
 import { formatMinutes } from '@/lib/task-format'
+import { useTimeStore } from '@/stores/time-store'
 
 interface TaskRowProps {
   task: Task
   busy: boolean
   canMoveUp: boolean
   canMoveDown: boolean
+  actualSeconds?: number
   onToggleDone: (task: Task) => void
   onStart: (task: Task) => void
   onEdit: (task: Task) => void
@@ -25,6 +29,7 @@ export function TaskRow({
   busy,
   canMoveUp,
   canMoveDown,
+  actualSeconds = 0,
   onToggleDone,
   onStart,
   onEdit,
@@ -35,6 +40,17 @@ export function TaskRow({
 }: TaskRowProps) {
   const archived = task.archivedAt !== null
   const done = task.status === 'done'
+
+  const manual = useTimeStore((state) => state.status?.manual ?? null)
+  const timerBusy = useTimeStore((state) => state.busy)
+  const startTimer = useTimeStore((state) => state.start)
+  const pauseTimer = useTimeStore((state) => state.pause)
+  const resumeTimer = useTimeStore((state) => state.resume)
+  const stopTimer = useTimeStore((state) => state.stop)
+  const liveElapsed = useLiveElapsedSeconds()
+
+  const isCurrentTask = manual?.entry.taskId === task.id
+  const anotherTaskRunning = manual !== null && !isCurrentTask
 
   return (
     <div
@@ -60,6 +76,9 @@ export function TaskRow({
         </span>
         <span className="shrink-0 text-[11px] text-muted-foreground">
           {formatMinutes(task.estimatedMinutes)}
+          {actualSeconds > 0 ? (
+            <span className="ml-1">· 实际 {formatDuration(actualSeconds)}</span>
+          ) : null}
         </span>
       </div>
 
@@ -67,6 +86,64 @@ export function TaskRow({
         <span className="text-[11px] text-muted-foreground">
           {TASK_STAGE_LABELS[task.stage]} · {TASK_STATUS_LABELS[task.status]}
         </span>
+
+        {isCurrentTask ? (
+          <span className="text-[11px] text-primary tabular-nums">
+            {manual?.entry.status === 'paused' ? '已暂停' : `计时 ${formatClock(liveElapsed)}`}
+          </span>
+        ) : null}
+
+        {!archived && !done ? (
+          isCurrentTask ? (
+            <>
+              {manual?.entry.status === 'running' ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={ACTION_CLASS}
+                  disabled={timerBusy}
+                  onClick={() => void pauseTimer()}
+                >
+                  暂停计时
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={ACTION_CLASS}
+                  disabled={timerBusy}
+                  onClick={() => void resumeTimer()}
+                >
+                  继续计时
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={ACTION_CLASS}
+                disabled={timerBusy}
+                onClick={() => void stopTimer()}
+              >
+                结束计时
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={ACTION_CLASS}
+              disabled={timerBusy || anotherTaskRunning}
+              title={anotherTaskRunning ? '请先结束当前计时' : '开始计时'}
+              onClick={() => void startTimer(task.id)}
+            >
+              开始计时
+            </Button>
+          )
+        ) : null}
 
         {!archived && task.status === 'todo' ? (
           <Button

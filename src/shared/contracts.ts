@@ -14,9 +14,20 @@ import {
   listTasksInputSchema,
   reorderTasksInputSchema,
   taskSchema,
+  timeAssignInputSchema,
+  timeEntryViewSchema,
+  timeListInputSchema,
+  timeMergeInputSchema,
+  timeStatusOutputSchema,
+  timeSummaryInputSchema,
+  timeSummaryOutputSchema,
+  timeTaskTotalsInputSchema,
+  timeTaskTotalsOutputSchema,
+  timeUpdateInputSchema,
   updateClientInputSchema,
   updateCommissionInputSchema,
-  updateTaskInputSchema
+  updateTaskInputSchema,
+  uuidSchema
 } from './domain'
 
 /**
@@ -43,6 +54,9 @@ export const noInputSchema = z.undefined()
 const clientListSchema = z.array(clientSchema)
 const commissionListSchema = z.array(commissionSchema)
 const taskListSchema = z.array(taskSchema)
+const timeEntryViewListSchema = z.array(timeEntryViewSchema)
+
+const timeStartInputSchema = z.strictObject({ taskId: uuidSchema })
 
 /**
  * 通道契约表：每个通道声明输入与输出 schema。
@@ -134,6 +148,55 @@ export const ipcContracts = {
   [IpcChannel.calendarTasks]: {
     input: calendarTasksInputSchema,
     output: calendarTasksOutputSchema
+  },
+
+  [IpcChannel.timeStatus]: {
+    input: noInputSchema,
+    output: timeStatusOutputSchema
+  },
+  [IpcChannel.timeStart]: {
+    input: timeStartInputSchema,
+    output: timeStatusOutputSchema
+  },
+  [IpcChannel.timePause]: {
+    input: noInputSchema,
+    output: timeStatusOutputSchema
+  },
+  [IpcChannel.timeResume]: {
+    input: noInputSchema,
+    output: timeStatusOutputSchema
+  },
+  [IpcChannel.timeStop]: {
+    input: noInputSchema,
+    output: timeStatusOutputSchema
+  },
+  [IpcChannel.timeList]: {
+    input: timeListInputSchema,
+    output: timeEntryViewListSchema
+  },
+  [IpcChannel.timeSummary]: {
+    input: timeSummaryInputSchema,
+    output: timeSummaryOutputSchema
+  },
+  [IpcChannel.timeUpdate]: {
+    input: timeUpdateInputSchema,
+    output: timeEntryViewSchema.nullable()
+  },
+  [IpcChannel.timeAssign]: {
+    input: timeAssignInputSchema,
+    output: timeEntryViewSchema.nullable()
+  },
+  [IpcChannel.timeDelete]: {
+    input: byIdInputSchema,
+    output: z.boolean()
+  },
+  [IpcChannel.timeMerge]: {
+    input: timeMergeInputSchema,
+    output: timeEntryViewSchema
+  },
+  [IpcChannel.timeTaskTotals]: {
+    input: timeTaskTotalsInputSchema,
+    output: timeTaskTotalsOutputSchema
   }
 } as const
 

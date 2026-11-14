@@ -4,6 +4,7 @@ import { clientSchema, commissionSchema, taskSchema } from '@shared/domain'
 import type { ClientsRepository } from '../db/repositories/clients'
 import type { CommissionsRepository } from '../db/repositories/commissions'
 import type { TasksRepository } from '../db/repositories/tasks'
+import type { TimeService } from '../time/time-service'
 
 export type IpcHandler = (payload: unknown) => Promise<unknown>
 export type IpcHandlers = Record<IpcChannelName, IpcHandler>
@@ -13,6 +14,7 @@ export interface IpcHandlerDeps {
   clients: ClientsRepository
   commissions: CommissionsRepository
   tasks: TasksRepository
+  time: TimeService
 }
 
 /**
@@ -23,7 +25,7 @@ export interface IpcHandlerDeps {
  * 非法数据不会越过进程边界。
  */
 export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
-  const { clients, commissions, tasks } = deps
+  const { clients, commissions, tasks, time } = deps
 
   return {
     [IpcChannel.appGetInfo]: async (payload) => {
@@ -124,6 +126,66 @@ export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
     [IpcChannel.calendarTasks]: async (payload) => {
       const input = ipcContracts[IpcChannel.calendarTasks].input.parse(payload)
       return ipcContracts[IpcChannel.calendarTasks].output.parse(tasks.calendar(input))
+    },
+
+    [IpcChannel.timeStatus]: async (payload) => {
+      ipcContracts[IpcChannel.timeStatus].input.parse(payload)
+      return ipcContracts[IpcChannel.timeStatus].output.parse(time.status())
+    },
+
+    [IpcChannel.timeStart]: async (payload) => {
+      const input = ipcContracts[IpcChannel.timeStart].input.parse(payload)
+      return ipcContracts[IpcChannel.timeStart].output.parse(time.start(input.taskId))
+    },
+
+    [IpcChannel.timePause]: async (payload) => {
+      ipcContracts[IpcChannel.timePause].input.parse(payload)
+      return ipcContracts[IpcChannel.timePause].output.parse(time.pause())
+    },
+
+    [IpcChannel.timeResume]: async (payload) => {
+      ipcContracts[IpcChannel.timeResume].input.parse(payload)
+      return ipcContracts[IpcChannel.timeResume].output.parse(time.resume())
+    },
+
+    [IpcChannel.timeStop]: async (payload) => {
+      ipcContracts[IpcChannel.timeStop].input.parse(payload)
+      return ipcContracts[IpcChannel.timeStop].output.parse(time.stop())
+    },
+
+    [IpcChannel.timeList]: async (payload) => {
+      const input = ipcContracts[IpcChannel.timeList].input.parse(payload)
+      return ipcContracts[IpcChannel.timeList].output.parse(time.list(input))
+    },
+
+    [IpcChannel.timeSummary]: async (payload) => {
+      const input = ipcContracts[IpcChannel.timeSummary].input.parse(payload)
+      return ipcContracts[IpcChannel.timeSummary].output.parse(time.summary(input))
+    },
+
+    [IpcChannel.timeUpdate]: async (payload) => {
+      const input = ipcContracts[IpcChannel.timeUpdate].input.parse(payload)
+      return ipcContracts[IpcChannel.timeUpdate].output.parse(time.update(input))
+    },
+
+    [IpcChannel.timeAssign]: async (payload) => {
+      const input = ipcContracts[IpcChannel.timeAssign].input.parse(payload)
+      return ipcContracts[IpcChannel.timeAssign].output.parse(time.assign(input.id, input.taskId))
+    },
+
+    [IpcChannel.timeDelete]: async (payload) => {
+      const input = ipcContracts[IpcChannel.timeDelete].input.parse(payload)
+      return ipcContracts[IpcChannel.timeDelete].output.parse(time.remove(input.id))
+    },
+
+    [IpcChannel.timeMerge]: async (payload) => {
+      const input = ipcContracts[IpcChannel.timeMerge].input.parse(payload)
+      return ipcContracts[IpcChannel.timeMerge].output.parse(time.merge(input))
+    },
+
+    [IpcChannel.timeTaskTotals]: async (payload) => {
+      const input = ipcContracts[IpcChannel.timeTaskTotals].input.parse(payload)
+      return ipcContracts[IpcChannel.timeTaskTotals].output.parse(time.taskTotals(input.taskIds))
     }
   }
 }

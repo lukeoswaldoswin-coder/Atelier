@@ -41,6 +41,21 @@ const api: AtelierApi = {
 
   calendar: {
     tasks: (input) => ipcRenderer.invoke(IpcChannel.calendarTasks, input)
+  },
+
+  time: {
+    status: () => ipcRenderer.invoke(IpcChannel.timeStatus),
+    start: (input) => ipcRenderer.invoke(IpcChannel.timeStart, input),
+    pause: () => ipcRenderer.invoke(IpcChannel.timePause),
+    resume: () => ipcRenderer.invoke(IpcChannel.timeResume),
+    stop: () => ipcRenderer.invoke(IpcChannel.timeStop),
+    list: (input) => ipcRenderer.invoke(IpcChannel.timeList, input),
+    summary: (input) => ipcRenderer.invoke(IpcChannel.timeSummary, input),
+    update: (input) => ipcRenderer.invoke(IpcChannel.timeUpdate, input),
+    assign: (input) => ipcRenderer.invoke(IpcChannel.timeAssign, input),
+    remove: (input: ByIdInput) => ipcRenderer.invoke(IpcChannel.timeDelete, input),
+    merge: (input) => ipcRenderer.invoke(IpcChannel.timeMerge, input),
+    taskTotals: (input) => ipcRenderer.invoke(IpcChannel.timeTaskTotals, input)
   }
 }
 

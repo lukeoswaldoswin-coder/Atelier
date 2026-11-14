@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Task } from '@shared/domain'
 import { TASK_STAGES, TASK_STAGE_LABELS } from '@shared/tasks'
+import { formatDuration } from '@shared/time-entries'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -13,6 +14,7 @@ import {
   unarchiveTask,
   updateTask
 } from '@/data/task-actions'
+import { useTaskTotals } from '@/data/time'
 import { useTasks } from '@/data/tasks'
 import { formatIpcError } from '@/lib/ipc-error'
 import { computeTaskProgress, formatMinutes } from '@/lib/task-format'
@@ -48,6 +50,12 @@ export function CommissionTasks({ commissionId, onChanged }: CommissionTasksProp
   )
 
   const progress = computeTaskProgress(tasks.rows)
+  const taskIds = useMemo(
+    () => tasks.rows.filter((task) => task.archivedAt === null).map((task) => task.id),
+    [tasks.rows]
+  )
+  const actualTotals = useTaskTotals(taskIds)
+  const actualTotal = [...actualTotals.values()].reduce((total, seconds) => total + seconds, 0)
   const interactionsDisabled = form !== null || busyId !== null
 
   const progressText =
@@ -55,7 +63,7 @@ export function CommissionTasks({ commissionId, onChanged }: CommissionTasksProp
       ? '还没有任务'
       : `${progress.done}/${progress.total} 已完成 · 预计 ${formatMinutes(progress.totalMinutes)}${
           progress.undoneMinutes > 0 ? `（未完成 ${formatMinutes(progress.undoneMinutes)}）` : ''
-        }`
+        }${actualTotal > 0 ? ` · 实际 ${formatDuration(actualTotal)}` : ''}`
 
   async function refresh(): Promise<void> {
     tasks.reload()
@@ -229,6 +237,7 @@ export function CommissionTasks({ commissionId, onChanged }: CommissionTasksProp
                   key={task.id}
                   task={task}
                   busy={busyId === task.id || interactionsDisabled}
+                  actualSeconds={actualTotals.get(task.id) ?? 0}
                   canMoveUp={index > 0}
                   canMoveDown={index >= 0 && index < stageTasks.length - 1}
                   onToggleDone={toggleDone}

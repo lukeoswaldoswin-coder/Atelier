@@ -5,6 +5,7 @@ import { createDatabaseService, type DatabaseService } from './db/service'
 import { createIpcHandlers } from './ipc/handlers'
 import { registerIpcHandlers } from './ipc/register'
 import { createSenderGuard, getRendererAllowedEntries } from './security'
+import { createTimeService, type TimeService } from './time/time-service'
 import { createMainWindow } from './window'
 
 /** 冒烟模式：启动窗口、等页面加载完成后自动退出，用于在命令行里验证应用能否真正运行。 */
@@ -25,6 +26,9 @@ app.setAppUserModelId('com.atelier.desktop')
 
 /** 数据库只存在于主进程，渲染进程没有任何直接访问入口。 */
 let database: DatabaseService | null = null
+/** 计时状态唯一持有者（主进程） */
+let timeService: TimeService | null = null
+let timeTicker: ReturnType<typeof setInterval> | null = null
 
 function getDatabaseFilePath(): string {
   return join(app.getPath('userData'), 'atelier.db')
@@ -105,6 +109,7 @@ if (!hasSingleInstanceLock) {
 
     try {
       database = createDatabaseService(getDatabaseFilePath())
+      timeService = createTimeService(database.timeEntries)
       console.log(`[atelier] 数据库文件: ${database.filePath}`)
       console.log(
         `[atelier] 数据库迁移: 本次应用 ${database.migration.applied.length} 个，已存在 ${database.migration.previouslyApplied.length} 个`
@@ -125,10 +130,15 @@ if (!hasSingleInstanceLock) {
         getAppInfo,
         clients: database.clients,
         commissions: database.commissions,
-        tasks: database.tasks
+        tasks: database.tasks,
+        time: timeService as TimeService
       }),
       { isAllowedSender: createSenderGuard(getRendererAllowedEntries()) }
     )
+
+    // 每秒检查一次计时（24 小时上限、30 秒检查点）
+    timeTicker = setInterval(() => timeService?.tick(), 1000)
+    timeTicker.unref?.()
 
     const win = createMainWindow()
     if (isSmokeTest) runSmokeCheck(win)
@@ -139,6 +149,9 @@ if (!hasSingleInstanceLock) {
   })
 
   app.on('will-quit', () => {
+    if (timeTicker) clearInterval(timeTicker)
+    timeTicker = null
+    timeService = null
     database?.close()
     database = null
   })

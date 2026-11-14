@@ -7,6 +7,8 @@ import { openDatabase, type AppDatabase } from '../db/database'
 import { createClientsRepository, type ClientsRepository } from '../db/repositories/clients'
 import { createCommissionsRepository, type CommissionsRepository } from '../db/repositories/commissions'
 import { createTasksRepository, type TasksRepository } from '../db/repositories/tasks'
+import { createTimeEntriesRepository } from '../db/repositories/time-entries'
+import { createTimeService, type TimeService } from '../time/time-service'
 import { createIpcHandlers, type IpcHandlers } from './handlers'
 
 const info: AppInfo = {
@@ -28,6 +30,7 @@ interface HandlersFixture {
   clients: ClientsRepository
   commissions: CommissionsRepository
   tasks: TasksRepository
+  time: TimeService
 }
 
 function setup(): HandlersFixture {
@@ -36,8 +39,9 @@ function setup(): HandlersFixture {
   const clients = createClientsRepository(db)
   const commissions = createCommissionsRepository(db)
   const tasks = createTasksRepository(db)
-  const handlers = createIpcHandlers({ getAppInfo: () => info, clients, commissions, tasks })
-  return { db, handlers, clients, commissions, tasks }
+  const time = createTimeService(createTimeEntriesRepository(db))
+  const handlers = createIpcHandlers({ getAppInfo: () => info, clients, commissions, tasks, time })
+  return { db, handlers, clients, commissions, tasks, time }
 }
 
 describe('createIpcHandlers', () => {
@@ -393,6 +397,60 @@ describe('createIpcHandlers', () => {
     db.close()
   })
 
+  it('time 通道：开始、暂停、继续、结束与状态查询', async () => {
+    const { handlers, db } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+    const commission = (await handlers[IpcChannel.commissionsCreate]({
+      clientId: client.id,
+      title: '委托',
+      type: '插画'
+    })) as Commission
+    const task = (await handlers[IpcChannel.tasksCreate]({
+      commissionId: commission.id,
+      title: '任务',
+      stage: 'draft'
+    })) as Task
+
+    const started = (await handlers[IpcChannel.timeStart]({ taskId: task.id })) as {
+      manual: { entry: { status: string; taskId: string } } | null
+    }
+    expect(started.manual?.entry.status).toBe('running')
+    expect(started.manual?.entry.taskId).toBe(task.id)
+
+    const paused = (await handlers[IpcChannel.timePause](undefined)) as {
+      manual: { entry: { status: string } } | null
+    }
+    expect(paused.manual?.entry.status).toBe('paused')
+
+    const resumed = (await handlers[IpcChannel.timeResume](undefined)) as {
+      manual: { entry: { status: string } } | null
+    }
+    expect(resumed.manual?.entry.status).toBe('running')
+
+    const stopped = (await handlers[IpcChannel.timeStop](undefined)) as {
+      manual: unknown | null
+    }
+    expect(stopped.manual).toBeNull()
+
+    const status = (await handlers[IpcChannel.timeStatus](undefined)) as {
+      manual: unknown | null
+      auto: unknown | null
+    }
+    expect(status.manual).toBeNull()
+    expect(status.auto).toBeNull()
+
+    const list = (await handlers[IpcChannel.timeList]({
+      from: '2026-01-01T00:00:00.000Z',
+      to: '2030-01-01T00:00:00.000Z'
+    })) as unknown[]
+    expect(list).toHaveLength(1)
+
+    await expect(handlers[IpcChannel.timeStart]({ taskId: task.id })).resolves.toBeTruthy()
+    await expect(handlers[IpcChannel.timeStart]({ taskId: task.id })).rejects.toThrow(/已有正在进行的计时/)
+    await handlers[IpcChannel.timeStop](undefined)
+    db.close()
+  })
+
   it('输出不符合契约时不会把脏数据交给渲染进程', async () => {
     const dirtyClients = {
       create: () => ({ id: 'not-a-uuid' }),
@@ -406,7 +464,8 @@ describe('createIpcHandlers', () => {
       getAppInfo: () => info,
       clients: dirtyClients,
       commissions: {} as CommissionsRepository,
-      tasks: {} as TasksRepository
+      tasks: {} as TasksRepository,
+      time: {} as TimeService
     })
 
     await expect(handlers[IpcChannel.clientsCreate]({ name: 'x' })).rejects.toThrow()

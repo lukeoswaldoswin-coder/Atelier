@@ -12,6 +12,15 @@ import type {
   ListTasksInput,
   ReorderTasksInput,
   Task,
+  TimeAssignInput,
+  TimeEntryView,
+  TimeListInput,
+  TimeMergeInput,
+  TimeStatusOutput,
+  TimeSummaryInput,
+  TimeSummaryOutput,
+  TimeTaskTotalsOutput,
+  TimeUpdateInput,
   UpdateClientInput,
   UpdateCommissionInput,
   UpdateTaskInput
@@ -59,5 +68,20 @@ export interface AtelierApi {
 
   calendar: {
     tasks(input: CalendarTasksInput): Promise<CalendarTasksOutput>
+  }
+
+  time: {
+    status(): Promise<TimeStatusOutput>
+    start(input: { taskId: string }): Promise<TimeStatusOutput>
+    pause(): Promise<TimeStatusOutput>
+    resume(): Promise<TimeStatusOutput>
+    stop(): Promise<TimeStatusOutput>
+    list(input: TimeListInput): Promise<TimeEntryView[]>
+    summary(input: TimeSummaryInput): Promise<TimeSummaryOutput>
+    update(input: TimeUpdateInput): Promise<TimeEntryView | null>
+    assign(input: TimeAssignInput): Promise<TimeEntryView | null>
+    remove(input: ByIdInput): Promise<boolean>
+    merge(input: TimeMergeInput): Promise<TimeEntryView>
+    taskTotals(input: { taskIds: string[] }): Promise<TimeTaskTotalsOutput>
   }
 }

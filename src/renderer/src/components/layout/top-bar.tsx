@@ -1,6 +1,7 @@
 import type { NavItem } from '@/config/navigation'
 import { Badge } from '@/components/ui/badge'
 import { ThemeToggle } from '@/components/theme/theme-toggle'
+import { TimeIndicator } from './time-indicator'
 
 export function TopBar({ route }: { route: NavItem }) {
   return (
@@ -10,6 +11,7 @@ export function TopBar({ route }: { route: NavItem }) {
         <p className="truncate text-[11px] text-muted-foreground">{route.description}</p>
       </div>
       <div className="ml-auto flex items-center gap-2">
+        <TimeIndicator />
         <Badge variant="outline">阶段 {route.phase}</Badge>
         <ThemeToggle />
       </div>
