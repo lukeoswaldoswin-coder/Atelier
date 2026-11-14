@@ -27,7 +27,11 @@ describe('数据持久化', () => {
 
     // 第一次启动：建库、写数据
     const first = createDatabaseService(filePath)
-    expect(first.migration.applied).toEqual(['001-initial', '002-deadline-and-payment'])
+    expect(first.migration.applied).toEqual([
+      '001-initial',
+      '002-deadline-and-payment',
+      '003-tasks'
+    ])
 
     const client = first.clients.create(createClientInputSchema.parse({ name: '重启测试客户' }))
     const commission = first.commissions.create(
@@ -53,7 +57,8 @@ describe('数据持久化', () => {
     expect(second.migration.applied).toEqual([])
     expect(second.migration.previouslyApplied).toEqual([
       '001-initial',
-      '002-deadline-and-payment'
+      '002-deadline-and-payment',
+      '003-tasks'
     ])
 
     const clients = second.clients.list({ includeArchived: true })

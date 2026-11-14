@@ -166,8 +166,17 @@ describe('主进程启动流程', () => {
       id: string
     }>
     probe.close()
-    expect(tables.map((row) => row.name)).toEqual(['clients', 'commissions', 'schema_migrations'])
-    expect(migrations.map((row) => row.id)).toEqual(['001-initial', '002-deadline-and-payment'])
+    expect(tables.map((row) => row.name)).toEqual([
+      'clients',
+      'commissions',
+      'schema_migrations',
+      'tasks'
+    ])
+    expect(migrations.map((row) => row.id)).toEqual([
+      '001-initial',
+      '002-deadline-and-payment',
+      '003-tasks'
+    ])
 
     // 数据相关通道均已注册
     expect(state.handlers.has(IpcChannel.appGetInfo)).toBe(true)
@@ -175,6 +184,10 @@ describe('主进程启动流程', () => {
     expect(state.handlers.has(IpcChannel.clientsUnarchive)).toBe(true)
     expect(state.handlers.has(IpcChannel.commissionsCreate)).toBe(true)
     expect(state.handlers.has(IpcChannel.commissionsUnarchive)).toBe(true)
+    expect(state.handlers.has(IpcChannel.tasksCreate)).toBe(true)
+    expect(state.handlers.has(IpcChannel.tasksReorder)).toBe(true)
+    expect(state.handlers.has(IpcChannel.tasksArchive)).toBe(true)
+    expect(state.handlers.has(IpcChannel.tasksUnarchive)).toBe(true)
 
     const win = state.windows[0] as WindowLike
     const webPreferences = win.options.webPreferences

@@ -135,6 +135,36 @@ interface LegacyCommissionRow {
   archived_at: string | null
 }
 
+/** 003：绘画任务表。 */
+const TASKS_V1_DDL = `
+  CREATE TABLE tasks (
+    id                TEXT PRIMARY KEY NOT NULL,
+    commission_id     TEXT NOT NULL REFERENCES commissions (id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    title             TEXT NOT NULL CHECK (length(trim(title)) > 0),
+    description       TEXT,
+    stage             TEXT NOT NULL DEFAULT 'draft'
+                        CHECK (stage IN ('draft', 'lineart', 'color', 'final', 'other')),
+    status            TEXT NOT NULL DEFAULT 'todo'
+                        CHECK (status IN ('todo', 'doing', 'done')),
+    estimated_minutes INTEGER
+                        CHECK (estimated_minutes IS NULL
+                               OR (typeof(estimated_minutes) = 'integer' AND estimated_minutes >= 0)),
+    sort_order        INTEGER NOT NULL DEFAULT 0
+                        CHECK (typeof(sort_order) = 'integer' AND sort_order >= 0),
+    completed_at      TEXT CHECK (completed_at IS NULL OR completed_at GLOB ${UTC_GLOB}),
+    created_at        TEXT NOT NULL CHECK (created_at GLOB ${UTC_GLOB}),
+    updated_at        TEXT NOT NULL CHECK (updated_at GLOB ${UTC_GLOB}),
+    archived_at       TEXT CHECK (archived_at IS NULL OR archived_at GLOB ${UTC_GLOB}),
+
+    -- 完成状态与完成时间必须一致
+    CHECK ((status = 'done') = (completed_at IS NOT NULL))
+  );
+
+  CREATE INDEX idx_tasks_commission_stage_sort ON tasks (commission_id, stage, sort_order);
+  CREATE INDEX idx_tasks_commission_status ON tasks (commission_id, status);
+  CREATE INDEX idx_tasks_archived ON tasks (archived_at);
+`
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     id: '001-initial',
@@ -270,6 +300,34 @@ export const MIGRATIONS: readonly Migration[] = [
 
       // PRAGMA foreign_key_check 只返回结果、不会抛错，必须主动检查
       assertNoForeignKeyViolations(db, '迁移 002')
+    }
+  },
+  {
+    id: '003-tasks',
+    name: '绘画任务表 + 委托完成时间',
+    run(db: AppDatabase): void {
+      // 已完成委托没有真实完成时间，用 updated_at 近似回填（在 README 中注明）
+      db.exec(
+        `ALTER TABLE commissions ADD COLUMN completed_at TEXT
+           CHECK (completed_at IS NULL OR completed_at GLOB ${UTC_GLOB})`
+      )
+      const backfilled = db
+        .prepare(
+          `UPDATE commissions SET completed_at = updated_at
+            WHERE status = 'completed' AND completed_at IS NULL`
+        )
+        .run()
+
+      db.exec(TASKS_V1_DDL)
+
+      // PRAGMA foreign_key_check 只返回结果、不会抛错，必须主动检查
+      assertNoForeignKeyViolations(db, '迁移 003')
+
+      if (backfilled.changes > 0) {
+        console.info(
+          `[migration 003] 回填 ${backfilled.changes} 个已完成委托的完成时间（使用 updated_at 近似）`
+        )
+      }
     }
   }
 ]

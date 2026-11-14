@@ -124,7 +124,8 @@ if (!hasSingleInstanceLock) {
       createIpcHandlers({
         getAppInfo,
         clients: database.clients,
-        commissions: database.commissions
+        commissions: database.commissions,
+        tasks: database.tasks
       }),
       { isAllowedSender: createSenderGuard(getRendererAllowedEntries()) }
     )

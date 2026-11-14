@@ -105,7 +105,7 @@ describe('迁移 002：截止时间三态 + 金额可空 + 付款状态推导', 
     expect(foreignKeys[0]?.table).toBe('clients')
     expect(foreignKeys[0]?.on_delete).toBe('RESTRICT')
 
-    expect(getAppliedMigrations(db).map((row) => row.id)).toEqual([
+    expect(getAppliedMigrations(db).map((row) => row.id).slice(0, 2)).toEqual([
       '001-initial',
       '002-deadline-and-payment'
     ])

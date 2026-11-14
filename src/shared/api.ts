@@ -4,10 +4,15 @@ import type {
   Commission,
   CreateClientInput,
   CreateCommissionInput,
+  CreateTaskInput,
   ListClientsInput,
   ListCommissionsInput,
+  ListTasksInput,
+  ReorderTasksInput,
+  Task,
   UpdateClientInput,
-  UpdateCommissionInput
+  UpdateCommissionInput,
+  UpdateTaskInput
 } from './domain'
 import type { AppInfo } from './contracts'
 
@@ -39,5 +44,14 @@ export interface AtelierApi {
     update(input: UpdateCommissionInput): Promise<Commission | null>
     archive(input: ByIdInput): Promise<Commission | null>
     unarchive(input: ByIdInput): Promise<Commission | null>
+  }
+
+  tasks: {
+    create(input: CreateTaskInput): Promise<Task>
+    list(input: ListTasksInput): Promise<Task[]>
+    update(input: UpdateTaskInput): Promise<Task | null>
+    reorder(input: ReorderTasksInput): Promise<Task[]>
+    archive(input: ByIdInput): Promise<Task | null>
+    unarchive(input: ByIdInput): Promise<Task | null>
   }
 }

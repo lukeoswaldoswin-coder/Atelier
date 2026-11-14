@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { IpcChannel, ipcChannelNames } from '@shared/channels'
 import type { AppInfo } from '@shared/contracts'
-import type { Client, Commission } from '@shared/domain'
+import type { Client, Commission, Task } from '@shared/domain'
 import { applyMigrations } from '../db/migrator'
 import { openDatabase, type AppDatabase } from '../db/database'
 import { createClientsRepository, type ClientsRepository } from '../db/repositories/clients'
 import { createCommissionsRepository, type CommissionsRepository } from '../db/repositories/commissions'
+import { createTasksRepository, type TasksRepository } from '../db/repositories/tasks'
 import { createIpcHandlers, type IpcHandlers } from './handlers'
 
 const info: AppInfo = {
@@ -26,6 +27,7 @@ interface HandlersFixture {
   handlers: IpcHandlers
   clients: ClientsRepository
   commissions: CommissionsRepository
+  tasks: TasksRepository
 }
 
 function setup(): HandlersFixture {
@@ -33,8 +35,9 @@ function setup(): HandlersFixture {
   applyMigrations(db)
   const clients = createClientsRepository(db)
   const commissions = createCommissionsRepository(db)
-  const handlers = createIpcHandlers({ getAppInfo: () => info, clients, commissions })
-  return { db, handlers, clients, commissions }
+  const tasks = createTasksRepository(db)
+  const handlers = createIpcHandlers({ getAppInfo: () => info, clients, commissions, tasks })
+  return { db, handlers, clients, commissions, tasks }
 }
 
 describe('createIpcHandlers', () => {
@@ -252,6 +255,108 @@ describe('createIpcHandlers', () => {
     db.close()
   })
 
+  it('tasks 全流程：创建、列表、完成、排序、归档、恢复', async () => {
+    const { handlers, db } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+    const commission = (await handlers[IpcChannel.commissionsCreate]({
+      clientId: client.id,
+      title: '委托',
+      type: '插画',
+      quoteAmountCents: 120000
+    })) as Commission
+
+    const draftTask = (await handlers[IpcChannel.tasksCreate]({
+      commissionId: commission.id,
+      title: '草稿',
+      stage: 'draft',
+      estimatedMinutes: 60
+    })) as Task
+    const lineTask = (await handlers[IpcChannel.tasksCreate]({
+      commissionId: commission.id,
+      title: '线稿',
+      stage: 'lineart'
+    })) as Task
+
+    const list = (await handlers[IpcChannel.tasksList]({
+      commissionId: commission.id
+    })) as Task[]
+    expect(list.map((task) => task.title)).toEqual(['草稿', '线稿'])
+
+    const done = (await handlers[IpcChannel.tasksUpdate]({
+      id: draftTask.id,
+      status: 'done'
+    })) as Task
+    expect(done.completedAt).not.toBeNull()
+
+    const reordered = (await handlers[IpcChannel.tasksReorder]({
+      commissionId: commission.id,
+      stage: 'draft',
+      orderedIds: [draftTask.id]
+    })) as Task[]
+    expect(reordered[0]?.sortOrder).toBe(0)
+
+    const archived = (await handlers[IpcChannel.tasksArchive]({ id: lineTask.id })) as Task
+    expect(archived.archivedAt).not.toBeNull()
+
+    const restored = (await handlers[IpcChannel.tasksUnarchive]({ id: lineTask.id })) as Task
+    expect(restored.archivedAt).toBeNull()
+    db.close()
+  })
+
+  it('tasks:reorder 拒绝不完整的任务集合，tasks:create 拒绝未知字段', async () => {
+    const { handlers, db } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+    const commission = (await handlers[IpcChannel.commissionsCreate]({
+      clientId: client.id,
+      title: '委托',
+      type: '插画'
+    })) as Commission
+
+    await handlers[IpcChannel.tasksCreate]({
+      commissionId: commission.id,
+      title: '任务',
+      stage: 'draft'
+    })
+
+    await expect(
+      handlers[IpcChannel.tasksReorder]({
+        commissionId: commission.id,
+        stage: 'draft',
+        orderedIds: []
+      })
+    ).rejects.toThrow(/全部任务/)
+
+    await expect(
+      handlers[IpcChannel.tasksCreate]({
+        commissionId: commission.id,
+        title: '任务',
+        completedAt: '2026-01-01T00:00:00.000Z'
+      })
+    ).rejects.toThrow()
+    db.close()
+  })
+
+  it('有未完成任务时，手动完成委托返回可读错误', async () => {
+    const { handlers, db } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+    const commission = (await handlers[IpcChannel.commissionsCreate]({
+      clientId: client.id,
+      title: '委托',
+      type: '插画'
+    })) as Commission
+    await handlers[IpcChannel.commissionsUpdate]({ id: commission.id, status: 'active' })
+    await handlers[IpcChannel.tasksCreate]({
+      commissionId: commission.id,
+      title: '未完成',
+      stage: 'draft'
+    })
+
+    await expect(
+      handlers[IpcChannel.commissionsUpdate]({ id: commission.id, status: 'completed' })
+    ).rejects.toThrow(/未完成任务/)
+    db.close()
+  })
+
   it('输出不符合契约时不会把脏数据交给渲染进程', async () => {
     const dirtyClients = {
       create: () => ({ id: 'not-a-uuid' }),
@@ -264,7 +369,8 @@ describe('createIpcHandlers', () => {
     const handlers = createIpcHandlers({
       getAppInfo: () => info,
       clients: dirtyClients,
-      commissions: {} as CommissionsRepository
+      commissions: {} as CommissionsRepository,
+      tasks: {} as TasksRepository
     })
 
     await expect(handlers[IpcChannel.clientsCreate]({ name: 'x' })).rejects.toThrow()

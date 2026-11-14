@@ -131,6 +131,12 @@ export const commissionSchema = z.object({
   outstandingCents: z.number().int().nonnegative().nullable(),
   /** 是否已结清（paid / not_required） */
   isSettled: z.boolean(),
+  /** 完成时间（进入已完成时写入，离开时清空；派生自状态，不入库以外的地方） */
+  completedAt: utcIsoSchema.nullable(),
+  /** 未归档任务总数（派生字段，不入库） */
+  taskCount: z.number().int().nonnegative(),
+  /** 未归档且已完成的任务数（派生字段，不入库） */
+  doneTaskCount: z.number().int().nonnegative(),
   createdAt: utcIsoSchema,
   updatedAt: utcIsoSchema,
   archivedAt: utcIsoSchema.nullable()
@@ -179,3 +185,78 @@ export type ListCommissionsInput = z.infer<typeof listCommissionsInputSchema>
 /** 通过 id 定位一条记录（查询 / 归档共用）。 */
 export const byIdInputSchema = z.object({ id: uuidSchema })
 export type ByIdInput = z.infer<typeof byIdInputSchema>
+
+// ---------------------------------------------------------------------------
+// 绘画任务（P2）
+// ---------------------------------------------------------------------------
+
+/** 任务阶段：固定顺序 草稿→线稿→上色→完稿→其他。 */
+export const taskStageSchema = z.enum(['draft', 'lineart', 'color', 'final', 'other'])
+export type TaskStage = z.infer<typeof taskStageSchema>
+
+/** 任务状态：待开始 / 进行中 / 已完成。 */
+export const taskStatusSchema = z.enum(['todo', 'doing', 'done'])
+export type TaskStatus = z.infer<typeof taskStatusSchema>
+
+/** 预计工时的上限（30 天），防止误输入极端值。 */
+export const MAX_ESTIMATED_MINUTES = 60 * 24 * 30
+
+const estimatedMinutesSchema = z
+  .number()
+  .int('预计工时必须是整数分钟')
+  .nonnegative('预计工时不能为负数')
+  .max(MAX_ESTIMATED_MINUTES, '预计工时不能超过 30 天')
+
+export const taskSchema = z.object({
+  id: uuidSchema,
+  commissionId: uuidSchema,
+  title: z.string().min(1),
+  description: z.string().nullable(),
+  stage: taskStageSchema,
+  status: taskStatusSchema,
+  /** null = 未估；单位分钟 */
+  estimatedMinutes: z.number().int().nonnegative().nullable(),
+  sortOrder: z.number().int().nonnegative(),
+  /** 与 status 联动：done 时必填，其余为 null */
+  completedAt: utcIsoSchema.nullable(),
+  createdAt: utcIsoSchema,
+  updatedAt: utcIsoSchema,
+  archivedAt: utcIsoSchema.nullable()
+})
+export type Task = z.infer<typeof taskSchema>
+
+export const createTaskInputSchema = z.strictObject({
+  commissionId: uuidSchema,
+  title: nameSchema,
+  description: longTextSchema.nullish(),
+  stage: taskStageSchema.default('draft'),
+  estimatedMinutes: estimatedMinutesSchema.nullish()
+})
+export type CreateTaskInput = z.infer<typeof createTaskInputSchema>
+
+/**
+ * 更新任务。
+ * completedAt 不在输入里：完成时间由 status 推导，防止渲染进程伪造。
+ */
+export const updateTaskInputSchema = z.strictObject({
+  id: uuidSchema,
+  title: nameSchema.optional(),
+  description: longTextSchema.nullish(),
+  stage: taskStageSchema.optional(),
+  status: taskStatusSchema.optional(),
+  estimatedMinutes: estimatedMinutesSchema.nullish()
+})
+export type UpdateTaskInput = z.infer<typeof updateTaskInputSchema>
+
+export const listTasksInputSchema = z.object({
+  commissionId: uuidSchema,
+  includeArchived: z.boolean().default(false)
+})
+export type ListTasksInput = z.infer<typeof listTasksInputSchema>
+
+export const reorderTasksInputSchema = z.strictObject({
+  commissionId: uuidSchema,
+  stage: taskStageSchema,
+  orderedIds: z.array(uuidSchema).max(500, '单个阶段的任务过多')
+})
+export type ReorderTasksInput = z.infer<typeof reorderTasksInputSchema>

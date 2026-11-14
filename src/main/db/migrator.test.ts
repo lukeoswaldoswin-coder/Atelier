@@ -16,9 +16,13 @@ describe('数据库迁移机制', () => {
 
     const result = applyMigrations(db)
 
-    expect(result.applied).toEqual(['001-initial', '002-deadline-and-payment'])
+    expect(result.applied).toEqual([
+      '001-initial',
+      '002-deadline-and-payment',
+      '003-tasks'
+    ])
     expect(result.previouslyApplied).toEqual([])
-    expect(listTables(db)).toEqual(['clients', 'commissions', 'schema_migrations'])
+    expect(listTables(db)).toEqual(['clients', 'commissions', 'schema_migrations', 'tasks'])
     db.close()
   })
 
@@ -29,8 +33,12 @@ describe('数据库迁移机制', () => {
     const second = applyMigrations(db)
 
     expect(second.applied).toEqual([])
-    expect(second.previouslyApplied).toEqual(['001-initial', '002-deadline-and-payment'])
-    expect(getAppliedMigrations(db)).toHaveLength(2)
+    expect(second.previouslyApplied).toEqual([
+      '001-initial',
+      '002-deadline-and-payment',
+      '003-tasks'
+    ])
+    expect(getAppliedMigrations(db)).toHaveLength(3)
     db.close()
   })
 
@@ -39,7 +47,11 @@ describe('数据库迁移机制', () => {
     applyMigrations(db)
 
     const records = getAppliedMigrations(db)
-    expect(records.map((row) => row.id)).toEqual(['001-initial', '002-deadline-and-payment'])
+    expect(records.map((row) => row.id)).toEqual([
+      '001-initial',
+      '002-deadline-and-payment',
+      '003-tasks'
+    ])
     expect(records[0]?.name).toContain('clients')
     expect(records[1]?.name).toContain('付款')
     for (const record of records) {
@@ -79,14 +91,16 @@ describe('数据库迁移机制', () => {
     db.close()
   })
 
-  it('迁移清单覆盖 P1.1 与 P1.1.5 的结构', () => {
+  it('迁移清单覆盖 P1.1 / P1.1.5 / P2 的结构', () => {
     expect(MIGRATIONS.map((migration) => migration.id)).toEqual([
       '001-initial',
-      '002-deadline-and-payment'
+      '002-deadline-and-payment',
+      '003-tasks'
     ])
     const first = MIGRATIONS[0]?.sql ?? ''
     expect(first).toContain('CREATE TABLE clients')
     expect(first).toContain('CREATE TABLE commissions')
     expect(typeof MIGRATIONS[1]?.run).toBe('function')
+    expect(typeof MIGRATIONS[2]?.run).toBe('function')
   })
 })

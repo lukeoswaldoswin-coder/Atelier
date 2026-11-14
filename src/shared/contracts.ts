@@ -6,10 +6,15 @@ import {
   commissionSchema,
   createClientInputSchema,
   createCommissionInputSchema,
+  createTaskInputSchema,
   listClientsInputSchema,
   listCommissionsInputSchema,
+  listTasksInputSchema,
+  reorderTasksInputSchema,
+  taskSchema,
   updateClientInputSchema,
-  updateCommissionInputSchema
+  updateCommissionInputSchema,
+  updateTaskInputSchema
 } from './domain'
 
 /**
@@ -35,6 +40,7 @@ export const noInputSchema = z.undefined()
 
 const clientListSchema = z.array(clientSchema)
 const commissionListSchema = z.array(commissionSchema)
+const taskListSchema = z.array(taskSchema)
 
 /**
  * 通道契约表：每个通道声明输入与输出 schema。
@@ -96,6 +102,31 @@ export const ipcContracts = {
   [IpcChannel.commissionsUnarchive]: {
     input: byIdInputSchema,
     output: commissionSchema.nullable()
+  },
+
+  [IpcChannel.tasksCreate]: {
+    input: createTaskInputSchema,
+    output: taskSchema
+  },
+  [IpcChannel.tasksList]: {
+    input: listTasksInputSchema,
+    output: taskListSchema
+  },
+  [IpcChannel.tasksUpdate]: {
+    input: updateTaskInputSchema,
+    output: taskSchema.nullable()
+  },
+  [IpcChannel.tasksReorder]: {
+    input: reorderTasksInputSchema,
+    output: taskListSchema
+  },
+  [IpcChannel.tasksArchive]: {
+    input: byIdInputSchema,
+    output: taskSchema.nullable()
+  },
+  [IpcChannel.tasksUnarchive]: {
+    input: byIdInputSchema,
+    output: taskSchema.nullable()
   }
 } as const
 

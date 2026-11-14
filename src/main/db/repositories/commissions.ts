@@ -38,6 +38,9 @@ const COLUMNS = [
   'quote_amount_cents AS quoteAmountCents',
   'paid_amount_cents AS paidAmountCents',
   'payment_status AS paymentStatus',
+  'completed_at AS completedAt',
+  '(SELECT COUNT(*) FROM tasks t WHERE t.commission_id = commissions.id AND t.archived_at IS NULL) AS taskCount',
+  "(SELECT COUNT(*) FROM tasks t WHERE t.commission_id = commissions.id AND t.archived_at IS NULL AND t.status = 'done') AS doneTaskCount",
   'created_at AS createdAt',
   'updated_at AS updatedAt',
   'archived_at AS archivedAt'
@@ -98,6 +101,12 @@ function rowToCommission(row: Record<string, unknown>): Commission {
     paymentStatus: status,
     outstandingCents: outstandingCentsOf(quote, paid),
     isSettled: isSettledStatus(status),
+    completedAt:
+      row['completedAt'] === null || row['completedAt'] === undefined
+        ? null
+        : toText(row['completedAt']),
+    taskCount: row['taskCount'] === undefined ? 0 : toNumber(row['taskCount']),
+    doneTaskCount: row['doneTaskCount'] === undefined ? 0 : toNumber(row['doneTaskCount']),
     createdAt: toText(row['createdAt']),
     updatedAt: toText(row['updatedAt']),
     archivedAt: row['archivedAt'] === null || row['archivedAt'] === undefined ? null : toText(row['archivedAt'])
@@ -225,6 +234,10 @@ export function createCommissionsRepository(db: AppDatabase): CommissionsReposit
         const currentQuote = toNullableNumber(current['quoteAmountCents'])
         const currentPaid = toNumber(current['paidAmountCents'])
         const currentStatus = toText(current['status']) as CommissionStatus
+        const currentCompletedAt =
+          current['completedAt'] === null || current['completedAt'] === undefined
+            ? null
+            : toText(current['completedAt'])
 
         // 状态流转必须符合约定，不允许跳步或回退到不存在的关系
         if (patch.status !== undefined && !canTransitionCommissionStatus(currentStatus, patch.status)) {
@@ -232,6 +245,24 @@ export function createCommissionsRepository(db: AppDatabase): CommissionsReposit
             'INVALID_STATUS_TRANSITION',
             `不能从「${COMMISSION_STATUS_LABELS[currentStatus]}」直接变更为「${COMMISSION_STATUS_LABELS[patch.status]}」`
           )
+        }
+
+        // 只有全部未归档任务都完成（或没有任务）才能手动标记完成
+        if (patch.status === 'completed' && currentStatus !== 'completed') {
+          const counts = db
+            .prepare(
+              `SELECT COUNT(*) AS total,
+                      COALESCE(SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END), 0) AS done
+                 FROM tasks WHERE commission_id = ? AND archived_at IS NULL`
+            )
+            .get(patch.id) as { total: number; done: number }
+
+          if (counts.total > counts.done) {
+            throw new DataError(
+              'TASKS_INCOMPLETE',
+              `还有 ${counts.total - counts.done} 个未完成任务，请先完成或归档它们`
+            )
+          }
         }
 
         const nextQuote = patch.quoteAmountCents === undefined ? currentQuote : patch.quoteAmountCents
@@ -262,8 +293,10 @@ export function createCommissionsRepository(db: AppDatabase): CommissionsReposit
           params['priority'] = patch.priority
         }
         if (patch.status !== undefined) {
-          fields.push('status = @status')
+          fields.push('status = @status', 'completed_at = @completedAt')
           params['status'] = patch.status
+          params['completedAt'] =
+            patch.status === 'completed' ? (currentCompletedAt ?? new Date().toISOString()) : null
         }
         if (patch.deadline !== undefined) {
           const deadline = deadlineColumns(patch.deadline)

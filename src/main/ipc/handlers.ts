@@ -1,8 +1,9 @@
 import { IpcChannel, type IpcChannelName } from '@shared/channels'
 import { appInfoSchema, ipcContracts, type AppInfo } from '@shared/contracts'
-import { clientSchema, commissionSchema } from '@shared/domain'
+import { clientSchema, commissionSchema, taskSchema } from '@shared/domain'
 import type { ClientsRepository } from '../db/repositories/clients'
 import type { CommissionsRepository } from '../db/repositories/commissions'
+import type { TasksRepository } from '../db/repositories/tasks'
 
 export type IpcHandler = (payload: unknown) => Promise<unknown>
 export type IpcHandlers = Record<IpcChannelName, IpcHandler>
@@ -11,6 +12,7 @@ export interface IpcHandlerDeps {
   getAppInfo: () => AppInfo | Promise<AppInfo>
   clients: ClientsRepository
   commissions: CommissionsRepository
+  tasks: TasksRepository
 }
 
 /**
@@ -21,7 +23,7 @@ export interface IpcHandlerDeps {
  * 非法数据不会越过进程边界。
  */
 export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
-  const { clients, commissions } = deps
+  const { clients, commissions, tasks } = deps
 
   return {
     [IpcChannel.appGetInfo]: async (payload) => {
@@ -87,6 +89,36 @@ export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
     [IpcChannel.commissionsUnarchive]: async (payload) => {
       const input = ipcContracts[IpcChannel.commissionsUnarchive].input.parse(payload)
       return ipcContracts[IpcChannel.commissionsUnarchive].output.parse(commissions.unarchive(input))
+    },
+
+    [IpcChannel.tasksCreate]: async (payload) => {
+      const input = ipcContracts[IpcChannel.tasksCreate].input.parse(payload)
+      return taskSchema.parse(tasks.create(input))
+    },
+
+    [IpcChannel.tasksList]: async (payload) => {
+      const input = ipcContracts[IpcChannel.tasksList].input.parse(payload ?? {})
+      return ipcContracts[IpcChannel.tasksList].output.parse(tasks.list(input))
+    },
+
+    [IpcChannel.tasksUpdate]: async (payload) => {
+      const input = ipcContracts[IpcChannel.tasksUpdate].input.parse(payload)
+      return ipcContracts[IpcChannel.tasksUpdate].output.parse(tasks.update(input))
+    },
+
+    [IpcChannel.tasksReorder]: async (payload) => {
+      const input = ipcContracts[IpcChannel.tasksReorder].input.parse(payload)
+      return ipcContracts[IpcChannel.tasksReorder].output.parse(tasks.reorder(input))
+    },
+
+    [IpcChannel.tasksArchive]: async (payload) => {
+      const input = ipcContracts[IpcChannel.tasksArchive].input.parse(payload)
+      return ipcContracts[IpcChannel.tasksArchive].output.parse(tasks.archive(input))
+    },
+
+    [IpcChannel.tasksUnarchive]: async (payload) => {
+      const input = ipcContracts[IpcChannel.tasksUnarchive].input.parse(payload)
+      return ipcContracts[IpcChannel.tasksUnarchive].output.parse(tasks.unarchive(input))
     }
   }
 }
