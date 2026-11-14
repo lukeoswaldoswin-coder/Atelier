@@ -1,0 +1,13 @@
+packages:
+  - '.'
+
+# 使用扁平 node_modules（与 npm 一致的真实目录结构）。
+# 原因：Windows 下 pnpm 默认的符号链接结构会让部分依赖（vitest 的 std-env、electron 的
+# 安装脚本）在按路径解析嵌套依赖时找不到包；扁平结构同时更方便后续 electron-builder 打包。
+nodeLinker: hoisted
+
+# pnpm 11 起用 allowBuilds 取代 onlyBuiltDependencies，决定哪些依赖的安装脚本可以执行。
+# electron 的安装脚本负责下载 Electron 二进制；esbuild 的安装脚本负责安装平台可执行文件。
+allowBuilds:
+  electron: true
+  esbuild: true
