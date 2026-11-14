@@ -81,6 +81,7 @@ function renderDetail(
 }
 
 afterEach(() => {
+  document.body.style.pointerEvents = ''
   Reflect.deleteProperty(window, 'atelier')
   vi.restoreAllMocks()
 })
@@ -238,5 +239,37 @@ describe('委托详情：状态与归档', () => {
     await user.click(screen.getByRole('button', { name: '编辑' }))
 
     expect(onEdit).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('委托详情：完成与校验', () => {
+  it('已完成委托展示完成时间', () => {
+    installApi()
+    renderDetail(
+      makeCommission({
+        status: 'completed',
+        completedAt: '2026-11-14T06:00:00.000Z'
+      })
+    )
+
+    const sheet = screen.getByTestId('sheet')
+    expect(within(sheet).getByText('完成')).toBeInTheDocument()
+  })
+
+  it('手动标记完成被后端拒绝时显示可读提示', async () => {
+    const update = vi.fn(async () => {
+      throw new Error(
+        "Error invoking remote method 'commissions:update': Error: 还有 1 个未完成任务，请先完成或归档它们"
+      )
+    })
+    installApi({ update })
+    renderDetail()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: '标记完成' }))
+
+    expect(
+      await screen.findByText('还有 1 个未完成任务，请先完成或归档它们')
+    ).toBeInTheDocument()
   })
 })

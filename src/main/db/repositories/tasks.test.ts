@@ -243,4 +243,19 @@ describe('任务仓储与委托状态联动', () => {
     expect(added.status).toBe('todo')
     expect(current().status).toBe('completed')
   })
+
+  it('草稿委托完成任务不会自动完成', () => {
+    const task = add({ title: '唯一任务' })
+    tasks.update({ id: task.id, status: 'done' })
+    expect(current().status).toBe('draft')
+  })
+
+  it('已取消委托不参与自动联动', () => {
+    activate()
+    const task = add({ title: '唯一任务' })
+    commissions.update({ id: commission.id, status: 'cancelled' })
+
+    tasks.update({ id: task.id, status: 'done' })
+    expect(current().status).toBe('cancelled')
+  })
 })

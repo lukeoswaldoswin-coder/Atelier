@@ -228,6 +228,15 @@ export function CommissionDetail({
 
             <dt className="text-muted-foreground">更新</dt>
             <dd className="text-foreground">{formatDateTimeInZone(commission.updatedAt, systemTimeZone)}</dd>
+
+            {commission.completedAt ? (
+              <>
+                <dt className="text-muted-foreground">完成</dt>
+                <dd className="text-foreground">
+                  {formatDateTimeInZone(commission.completedAt, systemTimeZone)}
+                </dd>
+              </>
+            ) : null}
           </dl>
 
           <section className="flex flex-col gap-1.5">

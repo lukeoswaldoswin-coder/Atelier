@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { Client, Commission } from '@shared/domain'
-import { makeClient, makeCommission } from '@/test-utils/fixtures'
+import type { Client, Commission, Task } from '@shared/domain'
+import { makeClient, makeCommission, makeTask } from '@/test-utils/fixtures'
 import { useCommissionsUiStore } from '@/stores/commissions-ui-store'
 import { CommissionsPage } from './commissions-page'
 
@@ -11,6 +11,10 @@ type ListMock<T> = ReturnType<typeof vi.fn<() => Promise<T[]>>>
 interface ActionMocks {
   create?: ReturnType<typeof vi.fn>
   update?: ReturnType<typeof vi.fn>
+  tasks?: {
+    list?: ReturnType<typeof vi.fn>
+    update?: ReturnType<typeof vi.fn>
+  }
 }
 
 function installApi(commissionList: ListMock<Commission>, clientList: ListMock<Client>, actions: ActionMocks = {}) {
@@ -35,8 +39,8 @@ function installApi(commissionList: ListMock<Commission>, clientList: ListMock<C
       },
       tasks: {
         create: vi.fn(),
-        list: vi.fn(async () => []),
-        update: vi.fn(),
+        list: actions.tasks?.list ?? vi.fn(async () => []),
+        update: actions.tasks?.update ?? vi.fn(),
         reorder: vi.fn(),
         archive: vi.fn(),
         unarchive: vi.fn()
@@ -54,6 +58,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // Radix Dialog 在卸载时会给 body 加 pointer-events: none，测试间显式复位避免串扰
+  document.body.style.pointerEvents = ''
   Reflect.deleteProperty(window, 'atelier')
   vi.restoreAllMocks()
 })
@@ -232,6 +238,64 @@ describe('委托列表页', () => {
     const rows = await screen.findAllByTestId('commission-row')
     expect(rows[0]).toHaveTextContent('任务 1/2')
     expect(rows[1]).not.toHaveTextContent('· 任务')
+  })
+
+  it('完成最后一个任务后，详情状态自动更新为已完成', async () => {
+    const client = makeClient({ name: '小夏' })
+    let current = makeCommission({
+      title: '联动委托',
+      clientId: client.id,
+      status: 'active',
+      quoteAmountCents: null,
+      paymentStatus: 'unquoted',
+      outstandingCents: null,
+      taskCount: 1,
+      doneTaskCount: 0
+    })
+    const task: Task = makeTask({
+      id: '11111111-1111-4111-8111-111111111111',
+      commissionId: current.id,
+      title: '唯一任务',
+      status: 'todo'
+    })
+
+    const commissionList = vi.fn(async () => [current])
+    const tasksList = vi.fn(async () => [{ ...task }])
+    const tasksUpdate = vi.fn(async (input: Record<string, unknown>) => {
+      if (input['status'] === 'done') {
+        current = {
+          ...current,
+          status: 'completed',
+          completedAt: '2026-11-14T06:00:00.000Z',
+          doneTaskCount: 1
+        }
+        task.status = 'done'
+        task.completedAt = '2026-11-14T06:00:00.000Z'
+      }
+      return task
+    })
+
+    installApi(commissionList, vi.fn(async () => [client]), {
+      tasks: { list: tasksList, update: tasksUpdate }
+    })
+
+    const user = userEvent.setup()
+    render(<CommissionsPage />)
+
+    await user.click(await screen.findByTestId('commission-row'))
+    const detail = await screen.findByTestId('sheet')
+    expect(within(detail).getByText('进行中')).toBeInTheDocument()
+
+    await user.click(await within(detail).findByLabelText('将「唯一任务」标记为已完成'))
+
+    await waitFor(() => {
+      expect(within(screen.getByTestId('sheet')).getByText('已完成')).toBeInTheDocument()
+    })
+    expect(within(screen.getByTestId('sheet')).getByText('完成')).toBeInTheDocument()
+
+    // 关闭详情，避免 Radix 的 body 锁定影响后续测试
+    await user.click(within(screen.getByTestId('sheet')).getByRole('button', { name: '关闭' }))
+    await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument())
   })
 
   it('点击委托行打开详情，编辑保存后详情即时更新', async () => {
