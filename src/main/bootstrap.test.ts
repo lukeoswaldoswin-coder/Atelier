@@ -89,6 +89,7 @@ vi.mock('electron', () => {
     session: { defaultSession: sessionDefault },
     shell: { openExternal: vi.fn() },
     dialog: { showErrorBox: vi.fn() },
+    powerMonitor: { on: vi.fn() },
     screen: {
       getPrimaryDisplay: () => ({ workAreaSize: { width: 2048, height: 1232 } })
     }

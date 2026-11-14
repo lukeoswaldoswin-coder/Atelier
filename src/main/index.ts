@@ -1,5 +1,8 @@
-import { app, BrowserWindow, dialog, ipcMain, session } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, powerMonitor, session } from 'electron'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { createActivityMonitor, type ActivityMonitor } from './activity/activity-monitor'
+import { createWin32Probe } from './activity/win32-probe'
 import { buildAppInfo } from './app-info'
 import { createDatabaseService, type DatabaseService } from './db/service'
 import { createIpcHandlers } from './ipc/handlers'
@@ -29,6 +32,7 @@ let database: DatabaseService | null = null
 /** 计时状态唯一持有者（主进程） */
 let timeService: TimeService | null = null
 let timeTicker: ReturnType<typeof setInterval> | null = null
+let activityMonitor: ActivityMonitor | null = null
 
 function getDatabaseFilePath(): string {
   return join(app.getPath('userData'), 'atelier.db')
@@ -107,9 +111,44 @@ if (!hasSingleInstanceLock) {
   void app.whenReady().then(() => {
     applySessionHardening()
 
+    // 打包/开发环境原生模块诊断：只写结果文件，不打开窗口
+    const probeSmokeFile = process.env['ATELIER_PROBE_SMOKE_FILE']
+    if (probeSmokeFile) {
+      try {
+        const probe = createWin32Probe()
+        const sample = probe.sample()
+        probe.dispose()
+        writeFileSync(
+          probeSmokeFile,
+          JSON.stringify({
+            ok: true,
+            platform: process.platform,
+            processName: sample.processName,
+            idleMs: sample.idleMs,
+            electron: process.versions.electron
+          }),
+          'utf8'
+        )
+      } catch (error) {
+        writeFileSync(
+          probeSmokeFile,
+          JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+          'utf8'
+        )
+      }
+      app.quit()
+      return
+    }
+
     try {
       database = createDatabaseService(getDatabaseFilePath())
       timeService = createTimeService(database.timeEntries)
+      activityMonitor = createActivityMonitor({
+        timeEntries: database.timeEntries,
+        settings: database.settings,
+        timeService,
+        createProbe: createWin32Probe
+      })
       console.log(`[atelier] 数据库文件: ${database.filePath}`)
       console.log(
         `[atelier] 数据库迁移: 本次应用 ${database.migration.applied.length} 个，已存在 ${database.migration.previouslyApplied.length} 个`
@@ -131,7 +170,8 @@ if (!hasSingleInstanceLock) {
         clients: database.clients,
         commissions: database.commissions,
         tasks: database.tasks,
-        time: timeService as TimeService
+        time: timeService as TimeService,
+        monitor: activityMonitor as ActivityMonitor
       }),
       { isAllowedSender: createSenderGuard(getRendererAllowedEntries()) }
     )
@@ -139,6 +179,12 @@ if (!hasSingleInstanceLock) {
     // 每秒检查一次计时（24 小时上限、30 秒检查点）
     timeTicker = setInterval(() => timeService?.tick(), 1000)
     timeTicker.unref?.()
+
+    // 自动监测按设置启动（默认关闭，不会加载原生探测）
+    activityMonitor.start()
+
+    powerMonitor.on('suspend', () => activityMonitor?.handleSuspend())
+    powerMonitor.on('resume', () => activityMonitor?.handleResume())
 
     const win = createMainWindow()
     if (isSmokeTest) runSmokeCheck(win)
@@ -151,6 +197,8 @@ if (!hasSingleInstanceLock) {
   app.on('will-quit', () => {
     if (timeTicker) clearInterval(timeTicker)
     timeTicker = null
+    activityMonitor?.stop()
+    activityMonitor = null
     timeService = null
     database?.close()
     database = null

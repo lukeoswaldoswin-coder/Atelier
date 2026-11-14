@@ -39,7 +39,12 @@ export const IpcChannel = {
   timeAssign: 'time:assign',
   timeDelete: 'time:delete',
   timeMerge: 'time:merge',
-  timeTaskTotals: 'time:task-totals'
+  timeTaskTotals: 'time:task-totals',
+
+  monitorStatus: 'monitor:status',
+  monitorSetEnabled: 'monitor:set-enabled',
+  monitorSetApps: 'monitor:set-apps',
+  monitorSetIdle: 'monitor:set-idle'
 } as const
 
 export type IpcChannelName = (typeof IpcChannel)[keyof typeof IpcChannel]

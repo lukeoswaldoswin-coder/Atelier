@@ -448,3 +448,23 @@ export const timeTaskTotalsOutputSchema = z.array(
   z.object({ taskId: uuidSchema, seconds: z.number().int().nonnegative() })
 )
 export type TimeTaskTotalsOutput = z.infer<typeof timeTaskTotalsOutputSchema>
+
+export const monitorStatusOutputSchema = z.object({
+  platformSupported: z.boolean(),
+  enabled: z.boolean(),
+  apps: z.array(z.string()),
+  idleMinutes: z.number().int(),
+  running: z.boolean(),
+  activeAppKey: z.string().nullable(),
+  idleSeconds: z.number().int().nonnegative().nullable(),
+  error: z.string().nullable()
+})
+export type MonitorStatusOutput = z.infer<typeof monitorStatusOutputSchema>
+
+export const monitorSetEnabledInputSchema = z.strictObject({ enabled: z.boolean() })
+export const monitorSetAppsInputSchema = z.strictObject({
+  apps: z.array(z.string().min(1).max(40)).max(20)
+})
+export const monitorSetIdleInputSchema = z.strictObject({
+  idleMinutes: z.number().int().min(1).max(120)
+})

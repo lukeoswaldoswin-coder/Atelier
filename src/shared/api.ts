@@ -10,6 +10,7 @@ import type {
   ListClientsInput,
   ListCommissionsInput,
   ListTasksInput,
+  MonitorStatusOutput,
   ReorderTasksInput,
   Task,
   TimeAssignInput,
@@ -83,5 +84,12 @@ export interface AtelierApi {
     remove(input: ByIdInput): Promise<boolean>
     merge(input: TimeMergeInput): Promise<TimeEntryView>
     taskTotals(input: { taskIds: string[] }): Promise<TimeTaskTotalsOutput>
+  }
+
+  monitor: {
+    status(): Promise<MonitorStatusOutput>
+    setEnabled(input: { enabled: boolean }): Promise<MonitorStatusOutput>
+    setApps(input: { apps: string[] }): Promise<MonitorStatusOutput>
+    setIdleMinutes(input: { idleMinutes: number }): Promise<MonitorStatusOutput>
   }
 }

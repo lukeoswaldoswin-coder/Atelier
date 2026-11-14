@@ -56,6 +56,13 @@ const api: AtelierApi = {
     remove: (input: ByIdInput) => ipcRenderer.invoke(IpcChannel.timeDelete, input),
     merge: (input) => ipcRenderer.invoke(IpcChannel.timeMerge, input),
     taskTotals: (input) => ipcRenderer.invoke(IpcChannel.timeTaskTotals, input)
+  },
+
+  monitor: {
+    status: () => ipcRenderer.invoke(IpcChannel.monitorStatus),
+    setEnabled: (input) => ipcRenderer.invoke(IpcChannel.monitorSetEnabled, input),
+    setApps: (input) => ipcRenderer.invoke(IpcChannel.monitorSetApps, input),
+    setIdleMinutes: (input) => ipcRenderer.invoke(IpcChannel.monitorSetIdle, input)
   }
 }
 

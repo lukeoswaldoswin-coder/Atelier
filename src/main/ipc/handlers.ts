@@ -4,6 +4,7 @@ import { clientSchema, commissionSchema, taskSchema } from '@shared/domain'
 import type { ClientsRepository } from '../db/repositories/clients'
 import type { CommissionsRepository } from '../db/repositories/commissions'
 import type { TasksRepository } from '../db/repositories/tasks'
+import type { ActivityMonitor } from '../activity/activity-monitor'
 import type { TimeService } from '../time/time-service'
 
 export type IpcHandler = (payload: unknown) => Promise<unknown>
@@ -15,6 +16,7 @@ export interface IpcHandlerDeps {
   commissions: CommissionsRepository
   tasks: TasksRepository
   time: TimeService
+  monitor: ActivityMonitor
 }
 
 /**
@@ -25,7 +27,7 @@ export interface IpcHandlerDeps {
  * 非法数据不会越过进程边界。
  */
 export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
-  const { clients, commissions, tasks, time } = deps
+  const { clients, commissions, tasks, time, monitor } = deps
 
   return {
     [IpcChannel.appGetInfo]: async (payload) => {
@@ -186,6 +188,26 @@ export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
     [IpcChannel.timeTaskTotals]: async (payload) => {
       const input = ipcContracts[IpcChannel.timeTaskTotals].input.parse(payload)
       return ipcContracts[IpcChannel.timeTaskTotals].output.parse(time.taskTotals(input.taskIds))
+    },
+
+    [IpcChannel.monitorStatus]: async (payload) => {
+      ipcContracts[IpcChannel.monitorStatus].input.parse(payload)
+      return ipcContracts[IpcChannel.monitorStatus].output.parse(monitor.status())
+    },
+
+    [IpcChannel.monitorSetEnabled]: async (payload) => {
+      const input = ipcContracts[IpcChannel.monitorSetEnabled].input.parse(payload)
+      return ipcContracts[IpcChannel.monitorSetEnabled].output.parse(monitor.setEnabled(input.enabled))
+    },
+
+    [IpcChannel.monitorSetApps]: async (payload) => {
+      const input = ipcContracts[IpcChannel.monitorSetApps].input.parse(payload)
+      return ipcContracts[IpcChannel.monitorSetApps].output.parse(monitor.setApps(input.apps))
+    },
+
+    [IpcChannel.monitorSetIdle]: async (payload) => {
+      const input = ipcContracts[IpcChannel.monitorSetIdle].input.parse(payload)
+      return ipcContracts[IpcChannel.monitorSetIdle].output.parse(monitor.setIdleMinutes(input.idleMinutes))
     }
   }
 }

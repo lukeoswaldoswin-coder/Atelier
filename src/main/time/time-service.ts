@@ -42,6 +42,8 @@ export interface TimeService {
   /** 由主进程定时器每秒调用：检查 24 小时上限并写检查点 */
   tick(): void
   getManualTaskId(): string | null
+  /** 手动计时是否正在运行（暂停不算） */
+  isManualRunning(): boolean
   list(input: TimeListInput): TimeEntryView[]
   summary(input: TimeSummaryInput): TimeSummaryOutput
   update(input: TimeUpdateInput): TimeEntryView | null
@@ -451,6 +453,7 @@ export function createTimeService(
     stop,
     tick,
     getManualTaskId: () => manual?.taskId ?? null,
+    isManualRunning: () => manual?.status === 'running',
     list,
     summary,
     update,

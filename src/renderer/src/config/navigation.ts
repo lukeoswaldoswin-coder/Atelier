@@ -84,10 +84,10 @@ export const navGroups: readonly NavGroup[] = [
       {
         id: 'settings',
         label: '设置',
-        description: '主题，以及数据备份、恢复与导出。',
+        description: '自动监测、主题，以及数据备份、恢复与导出。',
         icon: Settings,
-        phase: 'P6',
-        implemented: false
+        phase: 'P4',
+        implemented: true
       }
     ]
   }

@@ -12,6 +12,10 @@ import {
   listClientsInputSchema,
   listCommissionsInputSchema,
   listTasksInputSchema,
+  monitorSetAppsInputSchema,
+  monitorSetEnabledInputSchema,
+  monitorSetIdleInputSchema,
+  monitorStatusOutputSchema,
   reorderTasksInputSchema,
   taskSchema,
   timeAssignInputSchema,
@@ -197,6 +201,23 @@ export const ipcContracts = {
   [IpcChannel.timeTaskTotals]: {
     input: timeTaskTotalsInputSchema,
     output: timeTaskTotalsOutputSchema
+  },
+
+  [IpcChannel.monitorStatus]: {
+    input: noInputSchema,
+    output: monitorStatusOutputSchema
+  },
+  [IpcChannel.monitorSetEnabled]: {
+    input: monitorSetEnabledInputSchema,
+    output: monitorStatusOutputSchema
+  },
+  [IpcChannel.monitorSetApps]: {
+    input: monitorSetAppsInputSchema,
+    output: monitorStatusOutputSchema
+  },
+  [IpcChannel.monitorSetIdle]: {
+    input: monitorSetIdleInputSchema,
+    output: monitorStatusOutputSchema
   }
 } as const
 

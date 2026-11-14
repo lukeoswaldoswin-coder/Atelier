@@ -8,6 +8,7 @@ import { ComingSoonPage } from '@/pages/coming-soon-page'
 import { CalendarPage } from '@/pages/calendar/calendar-page'
 import { CommissionsPage } from '@/pages/commissions/commissions-page'
 import { DashboardPage } from '@/pages/dashboard-page'
+import { SettingsPage } from '@/pages/settings/settings-page'
 import { useNavigationStore } from '@/stores/navigation-store'
 import { useThemeStore } from '@/stores/theme-store'
 
@@ -19,6 +20,8 @@ function renderPage(route: NavItem) {
       return <CommissionsPage />
     case 'calendar':
       return <CalendarPage />
+    case 'settings':
+      return <SettingsPage />
     default:
       return <ComingSoonPage route={route} />
   }

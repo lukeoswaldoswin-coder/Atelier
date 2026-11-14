@@ -8,8 +8,35 @@ import { createClientsRepository, type ClientsRepository } from '../db/repositor
 import { createCommissionsRepository, type CommissionsRepository } from '../db/repositories/commissions'
 import { createTasksRepository, type TasksRepository } from '../db/repositories/tasks'
 import { createTimeEntriesRepository } from '../db/repositories/time-entries'
+import type { ActivityMonitor } from '../activity/activity-monitor'
 import { createTimeService, type TimeService } from '../time/time-service'
 import { createIpcHandlers, type IpcHandlers } from './handlers'
+
+const monitorStatus = {
+  platformSupported: true,
+  enabled: false,
+  apps: ['photoshop'],
+  idleMinutes: 3,
+  running: false,
+  activeAppKey: null,
+  idleSeconds: null,
+  error: null
+}
+
+function makeMonitor(): ActivityMonitor {
+  return {
+    status: () => monitorStatus,
+    setEnabled: () => ({ ...monitorStatus, enabled: true }),
+    setApps: () => monitorStatus,
+    setIdleMinutes: () => monitorStatus,
+    start: () => undefined,
+    stop: () => undefined,
+    tick: () => undefined,
+    handleSuspend: () => undefined,
+    handleResume: () => undefined,
+    getConfig: () => ({ enabled: false, apps: ['photoshop'], idleMinutes: 3 })
+  } as unknown as ActivityMonitor
+}
 
 const info: AppInfo = {
   name: 'atelier',
@@ -40,7 +67,14 @@ function setup(): HandlersFixture {
   const commissions = createCommissionsRepository(db)
   const tasks = createTasksRepository(db)
   const time = createTimeService(createTimeEntriesRepository(db))
-  const handlers = createIpcHandlers({ getAppInfo: () => info, clients, commissions, tasks, time })
+  const handlers = createIpcHandlers({
+    getAppInfo: () => info,
+    clients,
+    commissions,
+    tasks,
+    time,
+    monitor: makeMonitor()
+  })
   return { db, handlers, clients, commissions, tasks, time }
 }
 
@@ -465,7 +499,8 @@ describe('createIpcHandlers', () => {
       clients: dirtyClients,
       commissions: {} as CommissionsRepository,
       tasks: {} as TasksRepository,
-      time: {} as TimeService
+      time: {} as TimeService,
+      monitor: {} as ActivityMonitor
     })
 
     await expect(handlers[IpcChannel.clientsCreate]({ name: 'x' })).rejects.toThrow()
