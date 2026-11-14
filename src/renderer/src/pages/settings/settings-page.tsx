@@ -113,6 +113,24 @@ export function SettingsPage() {
             ) : null}
           </div>
 
+          <div className="flex items-start gap-2 rounded-md border border-border/60 px-3 py-2">
+            <input
+              type="checkbox"
+              className="mt-1 size-3.5"
+              aria-label="启用空闲检测"
+              checked={status?.idleEnabled ?? true}
+              disabled={monitor.busy}
+              onChange={(event) => void monitor.setIdleEnabled(event.target.checked)}
+            />
+            <div>
+              <p className="text-xs text-foreground">启用空闲检测</p>
+              <p className="text-[11px] text-muted-foreground">
+                关闭后，只要受支持软件在前台就持续累计，不再因为长时间无输入而暂停。
+                如果数位笔输入未被系统识别为空闲，建议关闭。
+              </p>
+            </div>
+          </div>
+
           {status?.activeAppKey ? (
             <p className="text-[11px] text-muted-foreground" data-testid="monitor-active">
               当前前台：{APP_KEY_LABELS[status.activeAppKey] ?? status.activeAppKey}

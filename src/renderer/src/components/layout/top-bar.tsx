@@ -12,7 +12,7 @@ export function TopBar({ route }: { route: NavItem }) {
       </div>
       <div className="ml-auto flex items-center gap-2">
         <TimeIndicator />
-        <Badge variant="outline">阶段 {route.phase}</Badge>
+        {route.implemented ? null : <Badge variant="outline">阶段 {route.phase}</Badge>}
         <ThemeToggle />
       </div>
     </header>

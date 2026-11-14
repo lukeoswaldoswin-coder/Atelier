@@ -17,6 +17,7 @@ const monitorStatus = {
   enabled: false,
   apps: ['photoshop'],
   idleMinutes: 3,
+  idleEnabled: true,
   running: false,
   activeAppKey: null,
   idleSeconds: null,

@@ -45,7 +45,8 @@ export const IpcChannel = {
   monitorStatus: 'monitor:status',
   monitorSetEnabled: 'monitor:set-enabled',
   monitorSetApps: 'monitor:set-apps',
-  monitorSetIdle: 'monitor:set-idle'
+  monitorSetIdle: 'monitor:set-idle',
+  monitorSetIdleEnabled: 'monitor:set-idle-enabled'
 } as const
 
 export type IpcChannelName = (typeof IpcChannel)[keyof typeof IpcChannel]

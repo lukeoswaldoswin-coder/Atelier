@@ -15,7 +15,8 @@ export const TIME_STATUS_LABELS = {
 export const DEFAULT_MONITOR_CONFIG: MonitorConfig = {
   enabled: false,
   apps: [...DEFAULT_ENABLED_APP_KEYS],
-  idleMinutes: 3
+  idleMinutes: 3,
+  idleEnabled: true
 }
 
 /** 秒 → `1 小时 05 分` / `3 分 20 秒`。 */

@@ -11,6 +11,7 @@ export interface MonitorResult {
   setEnabled: (enabled: boolean) => Promise<void>
   setApps: (apps: string[]) => Promise<void>
   setIdleMinutes: (minutes: number) => Promise<void>
+  setIdleEnabled: (enabled: boolean) => Promise<void>
 }
 
 /** 读取并修改自动监测设置（3 秒轮询运行状态）。 */
@@ -65,6 +66,7 @@ export function useMonitor(): MonitorResult {
     refresh,
     setEnabled: (enabled) => apply(() => getAtelierApi().monitor.setEnabled({ enabled })),
     setApps: (apps) => apply(() => getAtelierApi().monitor.setApps({ apps })),
-    setIdleMinutes: (minutes) => apply(() => getAtelierApi().monitor.setIdleMinutes({ idleMinutes: minutes }))
+    setIdleMinutes: (minutes) => apply(() => getAtelierApi().monitor.setIdleMinutes({ idleMinutes: minutes })),
+    setIdleEnabled: (enabled) => apply(() => getAtelierApi().monitor.setIdleEnabled({ enabled }))
   }
 }

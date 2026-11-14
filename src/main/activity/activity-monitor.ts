@@ -32,6 +32,7 @@ const EMPTY_STATUS: MonitorStatusOutput = {
   enabled: false,
   apps: [],
   idleMinutes: 3,
+  idleEnabled: true,
   running: false,
   activeAppKey: null,
   idleSeconds: null,
@@ -137,7 +138,8 @@ export function createActivityMonitor(deps: MonitorDeps) {
     const appKey = resolveAppKey(sample.processName)
     const supported = appKey !== null && config.apps.includes(appKey)
     const idleLimit = config.idleMinutes * 60 * 1000
-    const active = config.enabled && supported && sample.idleMs < idleLimit
+    const idleOk = !config.idleEnabled || sample.idleMs < idleLimit
+    const active = config.enabled && supported && idleOk
 
     if (!active) {
       closeAuto()
@@ -197,6 +199,7 @@ export function createActivityMonitor(deps: MonitorDeps) {
       enabled: config.enabled,
       apps: config.apps,
       idleMinutes: config.idleMinutes,
+      idleEnabled: config.idleEnabled,
       running: entry?.status === 'running',
       activeAppKey: auto?.appKey ?? null,
       idleSeconds: lastSample ? Math.floor(lastSample.idleMs / 1000) : null,
@@ -221,6 +224,12 @@ export function createActivityMonitor(deps: MonitorDeps) {
 
   function setIdleMinutes(idleMinutes: number): MonitorStatusOutput {
     config = deps.settings.setMonitorConfig({ ...config, idleMinutes })
+    return status()
+  }
+
+  function setIdleEnabled(idleEnabled: boolean): MonitorStatusOutput {
+    config = deps.settings.setMonitorConfig({ ...config, idleEnabled })
+    if (!idleEnabled) tick()
     return status()
   }
 
@@ -252,6 +261,7 @@ export function createActivityMonitor(deps: MonitorDeps) {
     setEnabled,
     setApps,
     setIdleMinutes,
+    setIdleEnabled,
     handleSuspend,
     handleResume,
     getConfig: (): MonitorConfig => config

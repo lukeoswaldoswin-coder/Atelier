@@ -63,7 +63,8 @@ const api: AtelierApi = {
     status: () => ipcRenderer.invoke(IpcChannel.monitorStatus),
     setEnabled: (input) => ipcRenderer.invoke(IpcChannel.monitorSetEnabled, input),
     setApps: (input) => ipcRenderer.invoke(IpcChannel.monitorSetApps, input),
-    setIdleMinutes: (input) => ipcRenderer.invoke(IpcChannel.monitorSetIdle, input)
+    setIdleMinutes: (input) => ipcRenderer.invoke(IpcChannel.monitorSetIdle, input),
+    setIdleEnabled: (input) => ipcRenderer.invoke(IpcChannel.monitorSetIdleEnabled, input)
   }
 }
 

@@ -15,6 +15,7 @@ import {
   listTasksInputSchema,
   monitorSetAppsInputSchema,
   monitorSetEnabledInputSchema,
+  monitorSetIdleEnabledInputSchema,
   monitorSetIdleInputSchema,
   monitorStatusOutputSchema,
   reorderTasksInputSchema,
@@ -222,6 +223,10 @@ export const ipcContracts = {
   },
   [IpcChannel.monitorSetIdle]: {
     input: monitorSetIdleInputSchema,
+    output: monitorStatusOutputSchema
+  },
+  [IpcChannel.monitorSetIdleEnabled]: {
+    input: monitorSetIdleEnabledInputSchema,
     output: monitorStatusOutputSchema
   }
 } as const

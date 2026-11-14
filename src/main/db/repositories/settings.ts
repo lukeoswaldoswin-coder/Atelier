@@ -11,7 +11,8 @@ export interface SettingsRepository {
 const KEYS = {
   enabled: 'monitor.enabled',
   apps: 'monitor.apps',
-  idleMinutes: 'monitor.idleMinutes'
+  idleMinutes: 'monitor.idleMinutes',
+  idleEnabled: 'monitor.idleEnabled'
 } as const
 
 export function createSettingsRepository(db: AppDatabase): SettingsRepository {
@@ -33,6 +34,7 @@ export function createSettingsRepository(db: AppDatabase): SettingsRepository {
     const rawEnabled = read(KEYS.enabled)
     const rawApps = read(KEYS.apps)
     const rawIdle = read(KEYS.idleMinutes)
+    const rawIdleEnabled = read(KEYS.idleEnabled)
 
     let apps: string[] = [...DEFAULT_MONITOR_CONFIG.apps]
     if (rawApps !== undefined) {
@@ -49,7 +51,8 @@ export function createSettingsRepository(db: AppDatabase): SettingsRepository {
     const candidate = {
       enabled: rawEnabled === '1',
       apps,
-      idleMinutes: rawIdle === undefined ? DEFAULT_MONITOR_CONFIG.idleMinutes : Number(rawIdle)
+      idleMinutes: rawIdle === undefined ? DEFAULT_MONITOR_CONFIG.idleMinutes : Number(rawIdle),
+      idleEnabled: rawIdleEnabled === undefined ? true : rawIdleEnabled !== '0'
     }
 
     const parsed = monitorConfigSchema.safeParse(candidate)
@@ -64,6 +67,7 @@ export function createSettingsRepository(db: AppDatabase): SettingsRepository {
       write(KEYS.enabled, parsed.enabled ? '1' : '0', now)
       write(KEYS.apps, JSON.stringify(parsed.apps), now)
       write(KEYS.idleMinutes, String(parsed.idleMinutes), now)
+      write(KEYS.idleEnabled, parsed.idleEnabled ? '1' : '0', now)
     })()
     return parsed
   }

@@ -93,5 +93,6 @@ export interface AtelierApi {
     setEnabled(input: { enabled: boolean }): Promise<MonitorStatusOutput>
     setApps(input: { apps: string[] }): Promise<MonitorStatusOutput>
     setIdleMinutes(input: { idleMinutes: number }): Promise<MonitorStatusOutput>
+    setIdleEnabled(input: { enabled: boolean }): Promise<MonitorStatusOutput>
   }
 }

@@ -9,24 +9,31 @@ const baseStatus: MonitorStatusOutput = {
   enabled: false,
   apps: ['photoshop', 'clipstudio', 'sai', 'krita', 'blender'],
   idleMinutes: 3,
+  idleEnabled: true,
   running: false,
   activeAppKey: null,
   idleSeconds: null,
   error: null
 }
 
-function installApi(overrides: Partial<Record<'status' | 'setEnabled' | 'setApps' | 'setIdleMinutes', unknown>> = {}) {
+function installApi(
+  overrides: Partial<
+    Record<'status' | 'setEnabled' | 'setApps' | 'setIdleMinutes' | 'setIdleEnabled', unknown>
+  > = {}
+) {
   const status = overrides.status ?? vi.fn(async () => baseStatus)
   const setEnabled = overrides.setEnabled ?? vi.fn(async () => ({ ...baseStatus, enabled: true }))
   const setApps = overrides.setApps ?? vi.fn(async () => baseStatus)
   const setIdleMinutes = overrides.setIdleMinutes ?? vi.fn(async () => baseStatus)
+  const setIdleEnabled =
+    overrides.setIdleEnabled ?? vi.fn(async () => ({ ...baseStatus, idleEnabled: false }))
 
   Object.defineProperty(window, 'atelier', {
     configurable: true,
-    value: { monitor: { status, setEnabled, setApps, setIdleMinutes } }
+    value: { monitor: { status, setEnabled, setApps, setIdleMinutes, setIdleEnabled } }
   })
 
-  return { status, setEnabled, setApps, setIdleMinutes }
+  return { status, setEnabled, setApps, setIdleMinutes, setIdleEnabled }
 }
 
 afterEach(() => {
@@ -96,5 +103,15 @@ describe('设置页：自动监测', () => {
     render(<SettingsPage />)
 
     expect(await screen.findByLabelText('启用自动监测')).toBeDisabled()
+  })
+
+  it('可以关闭空闲检测', async () => {
+    const { setIdleEnabled } = installApi()
+    const user = userEvent.setup()
+    render(<SettingsPage />)
+
+    await user.click(await screen.findByLabelText('启用空闲检测'))
+
+    await waitFor(() => expect(setIdleEnabled).toHaveBeenCalledWith({ enabled: false }))
   })
 })

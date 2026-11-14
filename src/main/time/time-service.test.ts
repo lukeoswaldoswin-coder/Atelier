@@ -241,6 +241,23 @@ describe('工时服务：手动计时', () => {
     expect(remaining.map((view) => view.entry.id)).toEqual([merged.entry.id])
   })
 
+  it('系统时间跳变不影响累计时长，并保留偏差信息', () => {
+    service.start(taskId)
+    clock.advance(60)
+    // 墙钟被向前调整 1 小时，单调时钟不变
+    clock.wall += 60 * 60 * 1000
+    service.stop()
+
+    const entry = service.list({
+      from: '2026-11-01T00:00:00.000Z',
+      to: '2026-12-02T00:00:00.000Z',
+      filter: 'all'
+    })[0]
+
+    expect(entry?.entry.elapsedSeconds).toBe(60)
+    expect(entry?.entry.clockSkewSeconds).toBeGreaterThanOrEqual(3000)
+  })
+
   it('删除是软删除，统计排除', () => {
     service.start(taskId)
     clock.advance(100)

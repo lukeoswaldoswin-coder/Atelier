@@ -191,6 +191,18 @@ describe('自动监测协调器', () => {
     expect(repo.findActiveAuto()).toBeNull()
   })
 
+  it('关闭空闲检测后，长时间无输入仍继续累计', () => {
+    probe.sampleValue = { processName: 'photoshop.exe', idleMs: 0 }
+    monitor.tick()
+    monitor.setIdleEnabled(false)
+
+    probe.sampleValue = { processName: 'photoshop.exe', idleMs: 200_000 }
+    monitor.tick()
+
+    expect(repo.findActiveAuto()).not.toBeNull()
+    expect(monitor.status().idleEnabled).toBe(false)
+  })
+
   it('超过 30 秒会写检查点', () => {
     probe.sampleValue = { processName: 'photoshop.exe', idleMs: 0 }
     monitor.tick()

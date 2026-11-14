@@ -236,11 +236,12 @@ describe('应用设置仓储', () => {
 
   it('写入后可读回', () => {
     const settings = createSettingsRepository(db)
-    settings.setMonitorConfig({ enabled: true, apps: ['photoshop', 'krita'], idleMinutes: 5 })
+    settings.setMonitorConfig({ enabled: true, apps: ['photoshop', 'krita'], idleMinutes: 5, idleEnabled: true })
     expect(settings.getMonitorConfig()).toEqual({
       enabled: true,
       apps: ['photoshop', 'krita'],
-      idleMinutes: 5
+      idleMinutes: 5,
+      idleEnabled: true
     })
   })
 

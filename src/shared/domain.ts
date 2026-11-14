@@ -429,7 +429,9 @@ export type TimeMergeInput = z.infer<typeof timeMergeInputSchema>
 export const monitorConfigSchema = z.object({
   enabled: z.boolean(),
   apps: z.array(z.string().min(1).max(40)).max(20),
-  idleMinutes: z.number().int().min(1).max(120)
+  idleMinutes: z.number().int().min(1).max(120),
+  /** 数位笔输入可能不被系统空闲统计识别；允许关闭空闲检测 */
+  idleEnabled: z.boolean()
 })
 export type MonitorConfig = z.infer<typeof monitorConfigSchema>
 
@@ -466,6 +468,7 @@ export const monitorStatusOutputSchema = z.object({
   enabled: z.boolean(),
   apps: z.array(z.string()),
   idleMinutes: z.number().int(),
+  idleEnabled: z.boolean(),
   running: z.boolean(),
   activeAppKey: z.string().nullable(),
   idleSeconds: z.number().int().nonnegative().nullable(),
@@ -479,4 +482,7 @@ export const monitorSetAppsInputSchema = z.strictObject({
 })
 export const monitorSetIdleInputSchema = z.strictObject({
   idleMinutes: z.number().int().min(1).max(120)
+})
+export const monitorSetIdleEnabledInputSchema = z.strictObject({
+  enabled: z.boolean()
 })

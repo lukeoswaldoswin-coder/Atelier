@@ -213,6 +213,13 @@ export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
     [IpcChannel.monitorSetIdle]: async (payload) => {
       const input = ipcContracts[IpcChannel.monitorSetIdle].input.parse(payload)
       return ipcContracts[IpcChannel.monitorSetIdle].output.parse(monitor.setIdleMinutes(input.idleMinutes))
+    },
+
+    [IpcChannel.monitorSetIdleEnabled]: async (payload) => {
+      const input = ipcContracts[IpcChannel.monitorSetIdleEnabled].input.parse(payload)
+      return ipcContracts[IpcChannel.monitorSetIdleEnabled].output.parse(
+        monitor.setIdleEnabled(input.enabled)
+      )
     }
   }
 }

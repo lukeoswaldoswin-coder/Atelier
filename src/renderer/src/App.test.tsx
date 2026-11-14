@@ -86,7 +86,7 @@ describe('应用外壳', () => {
     render(<App />)
     await screen.findByTestId('app-info')
 
-    await user.click(screen.getByRole('button', { name: /工时记录/ }))
+    await user.click(screen.getByRole('button', { name: /^工时记录/ }))
 
     expect(screen.getByRole('heading', { name: '工时记录', level: 1 })).toBeInTheDocument()
     expect(await screen.findByTestId('time-page')).toBeInTheDocument()
