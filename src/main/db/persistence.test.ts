@@ -31,7 +31,8 @@ describe('数据持久化', () => {
       '001-initial',
       '002-deadline-and-payment',
       '003-tasks',
-    '004-task-planned-date'
+    '004-task-planned-date',
+      '005-time-entries'
     ])
 
     const client = first.clients.create(createClientInputSchema.parse({ name: '重启测试客户' }))
@@ -60,7 +61,8 @@ describe('数据持久化', () => {
       '001-initial',
       '002-deadline-and-payment',
       '003-tasks',
-    '004-task-planned-date'
+    '004-task-planned-date',
+      '005-time-entries'
     ])
 
     const clients = second.clients.list({ includeArchived: true })

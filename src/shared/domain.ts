@@ -313,3 +313,138 @@ export const calendarTasksOutputSchema = z.object({
   deadlines: z.array(calendarDeadlineSchema)
 })
 export type CalendarTasksOutput = z.infer<typeof calendarTasksOutputSchema>
+
+// ---------------------------------------------------------------------------
+// 实际工时记录（P4）
+// ---------------------------------------------------------------------------
+
+export const timeSourceSchema = z.enum(['manual', 'auto'])
+export type TimeSource = z.infer<typeof timeSourceSchema>
+
+export const timeEntryStatusSchema = z.enum(['running', 'paused', 'completed'])
+export type TimeEntryStatus = z.infer<typeof timeEntryStatusSchema>
+
+/**
+ * 工时记录。
+ * elapsedSeconds 是统计权威值（单调时钟累计），startedAt/endedAt 只是墙钟观察值。
+ */
+export const timeEntrySchema = z.object({
+  id: uuidSchema,
+  taskId: uuidSchema.nullable(),
+  source: timeSourceSchema,
+  status: timeEntryStatusSchema,
+  startedAt: utcIsoSchema,
+  endedAt: utcIsoSchema.nullable(),
+  elapsedSeconds: z.number().int().nonnegative(),
+  lastHeartbeatAt: utcIsoSchema.nullable(),
+  appKey: z.string().min(1).max(40).nullable(),
+  mergedIntoId: uuidSchema.nullable(),
+  note: z.string().nullable(),
+  /** 结束时观察到的墙钟差 − 实际累计秒；用于保留系统时间异常信息 */
+  clockSkewSeconds: z.number().int().nullable(),
+  deletedAt: utcIsoSchema.nullable(),
+  createdAt: utcIsoSchema,
+  updatedAt: utcIsoSchema
+})
+export type TimeEntry = z.infer<typeof timeEntrySchema>
+
+export const timeTaskSummarySchema = z.object({
+  id: uuidSchema,
+  title: z.string().min(1),
+  stage: taskStageSchema
+})
+
+export const timeCommissionSummarySchema = z.object({
+  id: uuidSchema,
+  title: z.string().min(1),
+  clientName: z.string().min(1)
+})
+
+export const timeEntryViewSchema = z.object({
+  entry: timeEntrySchema,
+  task: timeTaskSummarySchema.nullable(),
+  commission: timeCommissionSummarySchema.nullable()
+})
+export type TimeEntryView = z.infer<typeof timeEntryViewSchema>
+
+export const timeListFilterSchema = z.enum(['all', 'unassigned'])
+export type TimeListFilter = z.infer<typeof timeListFilterSchema>
+
+export const timeListInputSchema = z.strictObject({
+  from: utcIsoSchema,
+  to: utcIsoSchema,
+  filter: timeListFilterSchema.default('all'),
+  taskId: uuidSchema.optional(),
+  commissionId: uuidSchema.optional()
+})
+export type TimeListInput = z.infer<typeof timeListInputSchema>
+
+export const timeDayTotalSchema = z.object({
+  date: deadlineDateStringSchema,
+  seconds: z.number().int().nonnegative()
+})
+
+export const timeTaskTotalSchema = z.object({
+  taskId: uuidSchema.nullable(),
+  taskTitle: z.string().nullable(),
+  commissionId: uuidSchema.nullable(),
+  commissionTitle: z.string().nullable(),
+  seconds: z.number().int().nonnegative()
+})
+
+export const timeSummaryInputSchema = z.strictObject({
+  from: utcIsoSchema,
+  to: utcIsoSchema
+})
+export type TimeSummaryInput = z.infer<typeof timeSummaryInputSchema>
+
+export const timeSummaryOutputSchema = z.object({
+  totalSeconds: z.number().int().nonnegative(),
+  unassignedSeconds: z.number().int().nonnegative(),
+  byDay: z.array(timeDayTotalSchema),
+  byTask: z.array(timeTaskTotalSchema)
+})
+export type TimeSummaryOutput = z.infer<typeof timeSummaryOutputSchema>
+
+export const timeUpdateInputSchema = z.strictObject({
+  id: uuidSchema,
+  taskId: uuidSchema.nullish(),
+  note: z.string().trim().max(1000).nullish(),
+  startedAt: utcIsoSchema.optional(),
+  endedAt: utcIsoSchema.optional()
+})
+export type TimeUpdateInput = z.infer<typeof timeUpdateInputSchema>
+
+export const timeAssignInputSchema = z.strictObject({
+  id: uuidSchema,
+  taskId: uuidSchema
+})
+export type TimeAssignInput = z.infer<typeof timeAssignInputSchema>
+
+export const timeMergeInputSchema = z.strictObject({
+  ids: z.array(uuidSchema).min(2, '至少选择两条记录').max(50, '一次最多合并 50 条')
+})
+export type TimeMergeInput = z.infer<typeof timeMergeInputSchema>
+
+export const monitorConfigSchema = z.object({
+  enabled: z.boolean(),
+  apps: z.array(z.string().min(1).max(40)).max(20),
+  idleMinutes: z.number().int().min(1).max(120)
+})
+export type MonitorConfig = z.infer<typeof monitorConfigSchema>
+
+export const timeStatusOutputSchema = z.object({
+  manual: timeEntryViewSchema.nullable(),
+  auto: timeEntryViewSchema.nullable(),
+  /** 需要提示用户的状态说明（异常恢复、超时自动暂停等） */
+  notice: z.string().nullable()
+})
+export type TimeStatusOutput = z.infer<typeof timeStatusOutputSchema>
+
+export const timeTaskTotalsInputSchema = z.strictObject({
+  taskIds: z.array(uuidSchema).max(200)
+})
+export const timeTaskTotalsOutputSchema = z.array(
+  z.object({ taskId: uuidSchema, seconds: z.number().int().nonnegative() })
+)
+export type TimeTaskTotalsOutput = z.infer<typeof timeTaskTotalsOutputSchema>

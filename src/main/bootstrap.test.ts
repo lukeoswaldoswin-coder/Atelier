@@ -167,16 +167,19 @@ describe('主进程启动流程', () => {
     }>
     probe.close()
     expect(tables.map((row) => row.name)).toEqual([
+      'app_settings',
       'clients',
       'commissions',
       'schema_migrations',
-      'tasks'
+      'tasks',
+      'time_entries'
     ])
     expect(migrations.map((row) => row.id)).toEqual([
       '001-initial',
       '002-deadline-and-payment',
       '003-tasks',
-    '004-task-planned-date'
+    '004-task-planned-date',
+      '005-time-entries'
     ])
 
     // 数据相关通道均已注册

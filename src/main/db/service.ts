@@ -4,6 +4,8 @@ import { backupBeforeMigrations } from './backup'
 import { createClientsRepository, type ClientsRepository } from './repositories/clients'
 import { createCommissionsRepository, type CommissionsRepository } from './repositories/commissions'
 import { createTasksRepository, type TasksRepository } from './repositories/tasks'
+import { createTimeEntriesRepository, type TimeEntriesRepository } from './repositories/time-entries'
+import { createSettingsRepository, type SettingsRepository } from './repositories/settings'
 
 export interface DatabaseService {
   readonly filePath: string
@@ -11,6 +13,8 @@ export interface DatabaseService {
   readonly clients: ClientsRepository
   readonly commissions: CommissionsRepository
   readonly tasks: TasksRepository
+  readonly timeEntries: TimeEntriesRepository
+  readonly settings: SettingsRepository
   readonly migration: MigrationRunResult
   /** 本次启动是否在迁移前创建了备份 */
   readonly backupPath: string | null
@@ -37,6 +41,8 @@ export function createDatabaseService(filePath: string): DatabaseService {
     clients: createClientsRepository(db),
     commissions: createCommissionsRepository(db),
     tasks: createTasksRepository(db),
+    timeEntries: createTimeEntriesRepository(db),
+    settings: createSettingsRepository(db),
     close(): void {
       if (db.open) db.close()
     }

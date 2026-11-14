@@ -355,5 +355,56 @@ export const MIGRATIONS: readonly Migration[] = [
 
       assertNoForeignKeyViolations(db, '迁移 004')
     }
+  },
+  {
+    id: '005-time-entries',
+    name: '工时记录与应用设置',
+    run(db: AppDatabase): void {
+      db.exec(`
+        CREATE TABLE time_entries (
+          id                 TEXT PRIMARY KEY NOT NULL,
+          task_id            TEXT REFERENCES tasks (id) ON UPDATE CASCADE ON DELETE RESTRICT,
+          source             TEXT NOT NULL CHECK (source IN ('manual', 'auto')),
+          status             TEXT NOT NULL CHECK (status IN ('running', 'paused', 'completed')),
+          started_at         TEXT NOT NULL CHECK (started_at GLOB ${UTC_GLOB}),
+          ended_at           TEXT CHECK (ended_at IS NULL OR ended_at GLOB ${UTC_GLOB}),
+          elapsed_seconds    INTEGER NOT NULL DEFAULT 0
+                               CHECK (typeof(elapsed_seconds) = 'integer' AND elapsed_seconds >= 0),
+          last_heartbeat_at  TEXT CHECK (last_heartbeat_at IS NULL OR last_heartbeat_at GLOB ${UTC_GLOB}),
+          app_key            TEXT CHECK (app_key IS NULL OR (length(app_key) BETWEEN 1 AND 40)),
+          merged_into_id     TEXT REFERENCES time_entries (id) ON DELETE SET NULL,
+          note               TEXT,
+          clock_skew_seconds INTEGER,
+          deleted_at         TEXT CHECK (deleted_at IS NULL OR deleted_at GLOB ${UTC_GLOB}),
+          created_at         TEXT NOT NULL CHECK (created_at GLOB ${UTC_GLOB}),
+          updated_at         TEXT NOT NULL CHECK (updated_at GLOB ${UTC_GLOB}),
+
+          -- 完成状态必须有结束时间；未完成不得有
+          CHECK ((status = 'completed') = (ended_at IS NOT NULL)),
+          -- 只有手动计时允许暂停
+          CHECK (source = 'manual' OR status <> 'paused'),
+          -- 应用标识只属于自动记录
+          CHECK (source = 'auto' OR app_key IS NULL)
+        );
+
+        CREATE INDEX idx_time_entries_started ON time_entries (started_at);
+        CREATE INDEX idx_time_entries_task ON time_entries (task_id);
+        CREATE INDEX idx_time_entries_merged ON time_entries (merged_into_id);
+
+        -- 同一时刻最多一个手动计时、一个自动片段
+        CREATE UNIQUE INDEX ux_time_entries_manual_active ON time_entries (source)
+          WHERE source = 'manual' AND status IN ('running', 'paused') AND deleted_at IS NULL;
+        CREATE UNIQUE INDEX ux_time_entries_auto_active ON time_entries (source)
+          WHERE source = 'auto' AND status = 'running' AND deleted_at IS NULL;
+
+        CREATE TABLE app_settings (
+          key        TEXT PRIMARY KEY NOT NULL,
+          value      TEXT NOT NULL,
+          updated_at TEXT NOT NULL CHECK (updated_at GLOB ${UTC_GLOB})
+        );
+      `)
+
+      assertNoForeignKeyViolations(db, '迁移 005')
+    }
   }
 ]

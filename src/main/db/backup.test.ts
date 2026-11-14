@@ -38,7 +38,7 @@ describe('迁移前自动备份', () => {
 
     const service = createDatabaseService(filePath)
 
-    expect(service.migration.applied).toEqual(['003-tasks', '004-task-planned-date'])
+    expect(service.migration.applied).toEqual(['003-tasks', '004-task-planned-date',  '005-time-entries'])
     expect(service.backupPath).not.toBeNull()
     expect(existsSync(service.backupPath as string)).toBe(true)
     expect(backups()).toHaveLength(1)
