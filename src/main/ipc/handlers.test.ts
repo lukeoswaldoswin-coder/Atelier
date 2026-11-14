@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { IpcChannel, ipcChannelNames } from '@shared/channels'
 import type { AppInfo } from '@shared/contracts'
 import type { CalendarTasksOutput, Client, Commission, Task } from '@shared/domain'
+import { deadlineFingerprint, type ScheduleApplyOutput } from '@shared/scheduling'
 import { applyMigrations } from '../db/migrator'
 import { openDatabase, type AppDatabase } from '../db/database'
 import { createClientsRepository, type ClientsRepository } from '../db/repositories/clients'
@@ -428,6 +429,73 @@ describe('createIpcHandlers', () => {
     ).rejects.toThrow()
     await expect(
       handlers[IpcChannel.calendarTasks]({ from: '2026-02-30', to: '2026-03-01' })
+    ).rejects.toThrow()
+    db.close()
+  })
+
+  it('schedule:apply 校验建议快照并批量写入，过期时拒绝', async () => {
+    const { handlers, db, commissions, tasks } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+    const created = (await handlers[IpcChannel.commissionsCreate]({
+      clientId: client.id,
+      title: '委托',
+      type: '插画',
+      priority: 3,
+      deadline: { kind: 'date', date: '2026-11-20' }
+    })) as Commission
+    await handlers[IpcChannel.commissionsUpdate]({ id: created.id, status: 'active' })
+    const commission = commissions.get({ id: created.id }) as Commission
+
+    const task = (await handlers[IpcChannel.tasksCreate]({
+      commissionId: commission.id,
+      title: '构图草稿',
+      stage: 'draft',
+      estimatedMinutes: 90
+    })) as Task
+
+    const basis = {
+      taskStatus: task.status,
+      estimatedMinutes: task.estimatedMinutes,
+      commissionStatus: 'active' as const,
+      commissionPriority: commission.priority,
+      deadlineFingerprint: deadlineFingerprint(commission.deadline)
+    }
+
+    const result = (await handlers[IpcChannel.scheduleApply]({
+      items: [{ taskId: task.id, plannedDate: '2026-11-18', basis }]
+    })) as ScheduleApplyOutput
+
+    expect(result.applied).toEqual([{ taskId: task.id, plannedDate: '2026-11-18' }])
+    expect(
+      tasks.list({ commissionId: commission.id, includeArchived: false })[0]?.plannedDate
+    ).toBe('2026-11-18')
+
+    const staleTask = (await handlers[IpcChannel.tasksCreate]({
+      commissionId: commission.id,
+      title: '上色',
+      stage: 'color',
+      estimatedMinutes: 120
+    })) as Task
+
+    await expect(
+      handlers[IpcChannel.scheduleApply]({
+        items: [
+          {
+            taskId: staleTask.id,
+            plannedDate: '2026-11-18',
+            basis: { ...basis, estimatedMinutes: 999 }
+          }
+        ]
+      })
+    ).rejects.toThrow(/建议依据已变化/)
+    expect(
+      tasks
+        .list({ commissionId: commission.id, includeArchived: false })
+        .find((item) => item.id === staleTask.id)?.plannedDate
+    ).toBeNull()
+
+    await expect(
+      handlers[IpcChannel.scheduleApply]({ items: [] })
     ).rejects.toThrow()
     db.close()
   })

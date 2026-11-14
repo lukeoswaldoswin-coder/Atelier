@@ -29,6 +29,8 @@ export const IpcChannel = {
 
   calendarTasks: 'calendar:tasks',
 
+  scheduleApply: 'schedule:apply',
+
   timeStatus: 'time:status',
   timeStart: 'time:start',
   timePause: 'time:pause',

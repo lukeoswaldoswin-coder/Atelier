@@ -18,6 +18,11 @@ import {
 } from '@shared/domain'
 import { DataError } from '@shared/errors'
 import { calendarDateOfDeadline } from '@shared/calendar-date'
+import {
+  deadlineFingerprint,
+  type ScheduleApplyInput,
+  type ScheduleAppliedItem
+} from '@shared/scheduling'
 import { TASK_STAGE_LABELS } from '@shared/tasks'
 import type { AppDatabase } from '../database'
 
@@ -72,6 +77,11 @@ export interface TasksRepository {
   unarchive(input: ByIdInput): Task | null
   /** 全部任务（含归档），用于工时归属选择 */
   listAll(): AssignableTask[]
+  /**
+   * 采纳排期建议：只写 planned_date。
+   * 事务内校验资格与建议快照；任一项不通过则整批回滚。
+   */
+  applyPlannedDates(input: ScheduleApplyInput): ScheduleAppliedItem[]
   /** 日历范围查询：已安排任务、未安排任务、范围内的委托截止。 */
   calendar(input: CalendarTasksInput): CalendarTasksOutput
 }
@@ -434,6 +444,88 @@ export function createTasksRepository(db: AppDatabase): TasksRepository {
             ? null
             : toText(row['archivedAt'])
       }))
+    },
+
+    applyPlannedDates(input: ScheduleApplyInput): ScheduleAppliedItem[] {
+      return db.transaction((): ScheduleAppliedItem[] => {
+        const now = new Date().toISOString()
+        const applied: ScheduleAppliedItem[] = []
+
+        for (const item of input.items) {
+          const row = db
+            .prepare(
+              `SELECT ${TASK_COLUMNS}, ${COMMISSION_COLUMNS},
+                      c.archived_at AS commissionArchivedAt
+                 ${CALENDAR_JOINS}
+                WHERE t.id = @id`
+            )
+            .get({ id: item.taskId }) as Record<string, unknown> | undefined
+
+          if (!row) {
+            throw new DataError('SCHEDULE_CONFLICT', '任务不存在，请刷新建议后重试')
+          }
+
+          const task = rowToTask(row)
+          const commission = commissionFromRow(row)
+
+          // 先比对建议依据（不含计划日期）：关键数据变化即视为过期
+          const stale =
+            task.status !== item.basis.taskStatus ||
+            task.estimatedMinutes !== item.basis.estimatedMinutes ||
+            commission.status !== item.basis.commissionStatus ||
+            commission.priority !== item.basis.commissionPriority ||
+            deadlineFingerprint(commission.deadline) !== item.basis.deadlineFingerprint
+
+          if (stale) {
+            throw new DataError(
+              'SCHEDULE_STALE',
+              `「${task.title}」的建议依据已变化（任务状态、预计工时、委托优先级或截止），已拒绝写入，请刷新建议后重试`
+            )
+          }
+
+          // 再校验当前是否仍可安排；计划日期变化只算冲突，不算建议过期
+          if (task.archivedAt !== null) {
+            throw new DataError('SCHEDULE_CONFLICT', `「${task.title}」已归档，无法安排`)
+          }
+          if (task.status === 'done') {
+            throw new DataError('SCHEDULE_CONFLICT', `「${task.title}」已完成，无需安排`)
+          }
+          if (task.plannedDate !== null) {
+            throw new DataError(
+              'SCHEDULE_CONFLICT',
+              `「${task.title}」已经有计划日期，请刷新建议后重试`
+            )
+          }
+          if (row['commissionArchivedAt'] !== null && row['commissionArchivedAt'] !== undefined) {
+            throw new DataError('SCHEDULE_CONFLICT', `「${task.title}」的委托已归档，无法安排`)
+          }
+          if (commission.status !== 'draft' && commission.status !== 'active') {
+            throw new DataError(
+              'SCHEDULE_CONFLICT',
+              `「${task.title}」的委托不在进行中或草稿状态，无法安排`
+            )
+          }
+
+          const result = db
+            .prepare(
+              `UPDATE tasks
+                  SET planned_date = @plannedDate, updated_at = @now
+                WHERE id = @id AND planned_date IS NULL`
+            )
+            .run({ id: item.taskId, plannedDate: item.plannedDate, now })
+
+          if (result.changes !== 1) {
+            throw new DataError(
+              'SCHEDULE_CONFLICT',
+              `「${task.title}」已经有计划日期，请刷新建议后重试`
+            )
+          }
+
+          applied.push({ taskId: item.taskId, plannedDate: item.plannedDate })
+        }
+
+        return applied
+      })()
     },
 
     calendar(input: CalendarTasksInput): CalendarTasksOutput {

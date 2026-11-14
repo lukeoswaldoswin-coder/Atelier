@@ -34,7 +34,12 @@ export const scheduleBasisSchema = z.strictObject({
   estimatedMinutes: z.number().int().nonnegative().nullable(),
   commissionStatus: z.enum(['draft', 'active']),
   commissionPriority: z.number().int().min(1).max(5),
-  deadlineFingerprint: z.string().min(1).max(200)
+  deadlineFingerprint: z
+    .string()
+    .regex(
+      /^(none|date:\d{4}-\d{2}-\d{2}|datetime:\d{4}-\d{2}-\d{2}T.+@.+)$/,
+      '截止指纹格式无效'
+    )
 })
 export type ScheduleBasis = z.infer<typeof scheduleBasisSchema>
 

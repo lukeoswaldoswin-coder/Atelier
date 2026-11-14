@@ -44,6 +44,10 @@ const api: AtelierApi = {
     tasks: (input) => ipcRenderer.invoke(IpcChannel.calendarTasks, input)
   },
 
+  schedule: {
+    apply: (input) => ipcRenderer.invoke(IpcChannel.scheduleApply, input)
+  },
+
   time: {
     status: () => ipcRenderer.invoke(IpcChannel.timeStatus),
     start: (input) => ipcRenderer.invoke(IpcChannel.timeStart, input),

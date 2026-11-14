@@ -27,6 +27,7 @@ import type {
   UpdateCommissionInput,
   UpdateTaskInput
 } from './domain'
+import type { ScheduleApplyInput, ScheduleApplyOutput } from './scheduling'
 import type { AppInfo } from './contracts'
 
 /**
@@ -71,6 +72,10 @@ export interface AtelierApi {
 
   calendar: {
     tasks(input: CalendarTasksInput): Promise<CalendarTasksOutput>
+  }
+
+  schedule: {
+    apply(input: ScheduleApplyInput): Promise<ScheduleApplyOutput>
   }
 
   time: {

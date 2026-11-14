@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { IpcChannel } from './channels'
+import { scheduleApplyInputSchema, scheduleApplyOutputSchema } from './scheduling'
 import {
   assignableTaskSchema,
   byIdInputSchema,
@@ -158,6 +159,11 @@ export const ipcContracts = {
   [IpcChannel.calendarTasks]: {
     input: calendarTasksInputSchema,
     output: calendarTasksOutputSchema
+  },
+
+  [IpcChannel.scheduleApply]: {
+    input: scheduleApplyInputSchema,
+    output: scheduleApplyOutputSchema
   },
 
   [IpcChannel.timeStatus]: {

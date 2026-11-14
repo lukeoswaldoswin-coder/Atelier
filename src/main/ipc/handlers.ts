@@ -135,6 +135,13 @@ export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
       return ipcContracts[IpcChannel.calendarTasks].output.parse(tasks.calendar(input))
     },
 
+    [IpcChannel.scheduleApply]: async (payload) => {
+      const input = ipcContracts[IpcChannel.scheduleApply].input.parse(payload)
+      return ipcContracts[IpcChannel.scheduleApply].output.parse({
+        applied: tasks.applyPlannedDates(input)
+      })
+    },
+
     [IpcChannel.timeStatus]: async (payload) => {
       ipcContracts[IpcChannel.timeStatus].input.parse(payload)
       return ipcContracts[IpcChannel.timeStatus].output.parse(time.status())
