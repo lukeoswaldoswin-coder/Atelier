@@ -1,6 +1,6 @@
+import { createHash } from 'node:crypto'
 import {
   copyFileSync,
-  createHash,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -90,7 +90,7 @@ for (const marker of ['ATELIER_DATAINFO_SMOKE_FILE', 'backup:create']) {
 console.log(`[atelier-inno] 3/3 使用 ISCC 编译（AppVersion=${version}）`)
 run(iscc, [`/DAppVersion=${version}`, join(root, 'build', 'atelier.iss')])
 
-const installer = join(root, 'dist', `Atelier-Setup-${version}.exe`)
+const installer = join(root, 'dist', `画师工坊-Setup-${version}.exe`)
 if (!existsSync(installer)) {
   throw new Error(`未找到安装包：${installer}`)
 }
@@ -99,7 +99,7 @@ if (!existsSync(installer)) {
 // 复制到用户本地目录，新文件继承 Medium，作为最终交付 EXE；原始构建产物保留。
 const releaseDir = join(process.env['LOCALAPPDATA'] ?? root, 'Atelier', 'release')
 mkdirSync(releaseDir, { recursive: true })
-const releaseInstaller = join(releaseDir, `Atelier-Setup-${version}.exe`)
+const releaseInstaller = join(releaseDir, `画师工坊-Setup-${version}.exe`)
 copyFileSync(installer, releaseInstaller)
 
 if (process.platform === 'win32') {

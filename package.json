@@ -2,7 +2,7 @@
     "name":  "atelier",
     "version":  "0.1.0",
     "private":  true,
-    "description":  "Atelier - 面向独立画师的本地委托管理软件",
+    "description":  "画师工坊（Atelier）- 画师委托与创作管理工具",
     "author":  "Atelier",
     "main":  "./out/main/index.js",
     "scripts":  {

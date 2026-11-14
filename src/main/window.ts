@@ -25,7 +25,7 @@ export function createMainWindow(): BrowserWindow {
     minHeight: size.minHeight,
     center: true,
     show: false,
-    title: 'Atelier',
+    title: 'Atelier 画师工坊',
     backgroundColor: WINDOW_BACKGROUND,
     autoHideMenuBar: true,
     webPreferences: {

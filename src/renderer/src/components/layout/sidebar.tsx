@@ -17,7 +17,7 @@ export function Sidebar() {
         <span className="flex size-7 items-center justify-center rounded-md bg-primary/15 text-primary">
           <Palette className="size-4" aria-hidden="true" />
         </span>
-        <span className="text-sm font-semibold tracking-tight">Atelier</span>
+        <span className="text-sm font-semibold tracking-tight">画师工坊</span>
         <span className="ml-auto rounded border border-sidebar-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
           P1
         </span>
