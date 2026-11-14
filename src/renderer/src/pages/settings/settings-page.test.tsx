@@ -30,7 +30,26 @@ function installApi(
 
   Object.defineProperty(window, 'atelier', {
     configurable: true,
-    value: { monitor: { status, setEnabled, setApps, setIdleMinutes, setIdleEnabled } }
+    value: {
+      monitor: { status, setEnabled, setApps, setIdleMinutes, setIdleEnabled },
+      data: {
+        info: vi.fn(async () => ({
+          appVersion: '0.1.0',
+          dbPath: 'C:\\Users\\test\\AppData\\Roaming\\atelier\\atelier.db',
+          backupDir: 'C:\\Users\\test\\AppData\\Roaming\\atelier\\backups',
+          recoveryArchiveDir: 'C:\\Users\\test\\AppData\\Roaming\\atelier\\recovery-archive',
+          dbSizeBytes: 1024,
+          schemaVersion: '005-time-entries',
+          backupCount: 0,
+          userDataDir: 'C:\\Users\\test\\AppData\\Roaming\\atelier'
+        }))
+      },
+      backup: {
+        create: vi.fn(),
+        list: vi.fn(async () => []),
+        reveal: vi.fn(async () => true)
+      }
+    }
   })
 
   return { status, setEnabled, setApps, setIdleMinutes, setIdleEnabled }

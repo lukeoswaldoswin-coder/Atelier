@@ -28,6 +28,7 @@ import type {
   UpdateTaskInput
 } from './domain'
 import type { ScheduleApplyInput, ScheduleApplyOutput } from './scheduling'
+import type { BackupInfo, DataInfo } from './data'
 import type { AppInfo } from './contracts'
 
 /**
@@ -76,6 +77,16 @@ export interface AtelierApi {
 
   schedule: {
     apply(input: ScheduleApplyInput): Promise<ScheduleApplyOutput>
+  }
+
+  data: {
+    info(): Promise<DataInfo>
+  }
+
+  backup: {
+    create(): Promise<BackupInfo>
+    list(): Promise<BackupInfo[]>
+    reveal(): Promise<boolean>
   }
 
   time: {

@@ -31,6 +31,11 @@ export const IpcChannel = {
 
   scheduleApply: 'schedule:apply',
 
+  dataInfo: 'data:info',
+  backupCreate: 'backup:create',
+  backupList: 'backup:list',
+  backupReveal: 'backup:reveal',
+
   timeStatus: 'time:status',
   timeStart: 'time:start',
   timePause: 'time:pause',

@@ -48,6 +48,16 @@ const api: AtelierApi = {
     apply: (input) => ipcRenderer.invoke(IpcChannel.scheduleApply, input)
   },
 
+  data: {
+    info: () => ipcRenderer.invoke(IpcChannel.dataInfo)
+  },
+
+  backup: {
+    create: () => ipcRenderer.invoke(IpcChannel.backupCreate),
+    list: () => ipcRenderer.invoke(IpcChannel.backupList),
+    reveal: () => ipcRenderer.invoke(IpcChannel.backupReveal)
+  },
+
   time: {
     status: () => ipcRenderer.invoke(IpcChannel.timeStatus),
     start: (input) => ipcRenderer.invoke(IpcChannel.timeStart, input),

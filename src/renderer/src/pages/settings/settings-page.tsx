@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useMonitor } from '@/data/monitor'
+import { DataManagementCard } from './data-management-card'
 
 export function SettingsPage() {
   const monitor = useMonitor()
@@ -145,6 +146,8 @@ export function SettingsPage() {
           ) : null}
         </CardContent>
       </Card>
+
+      <DataManagementCard />
 
       <Card>
         <CardHeader>

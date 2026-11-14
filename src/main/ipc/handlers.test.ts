@@ -10,6 +10,7 @@ import { createCommissionsRepository, type CommissionsRepository } from '../db/r
 import { createTasksRepository, type TasksRepository } from '../db/repositories/tasks'
 import { createTimeEntriesRepository } from '../db/repositories/time-entries'
 import type { ActivityMonitor } from '../activity/activity-monitor'
+import type { DataController } from '../data/controller'
 import { createTimeService, type TimeService } from '../time/time-service'
 import { createIpcHandlers, type IpcHandlers } from './handlers'
 
@@ -62,6 +63,31 @@ interface HandlersFixture {
   time: TimeService
 }
 
+function makeData(): DataController {
+  return {
+    info: () => ({
+      appVersion: '0.1.0',
+      dbPath: 'C:\\temp\\atelier.db',
+      backupDir: 'C:\\temp\\backups',
+      recoveryArchiveDir: 'C:\\temp\\recovery-archive',
+      dbSizeBytes: 1024,
+      schemaVersion: '005-time-entries',
+      backupCount: 1,
+      userDataDir: 'C:\\temp'
+    }),
+    createBackup: () => ({
+      path: 'C:\\temp\\backups\\Atelier-backup-20261114-120000-000.db',
+      fileName: 'Atelier-backup-20261114-120000-000.db',
+      sizeBytes: 1024,
+      createdAt: '2026-11-14T12:00:00.000Z',
+      schemaVersion: '005-time-entries',
+      kind: 'manual'
+    }),
+    listBackups: () => [],
+    revealBackup: () => true
+  } as unknown as DataController
+}
+
 function setup(): HandlersFixture {
   const db = openDatabase(':memory:')
   applyMigrations(db)
@@ -75,7 +101,8 @@ function setup(): HandlersFixture {
     commissions,
     tasks,
     time,
-    monitor: makeMonitor()
+    monitor: makeMonitor(),
+    data: makeData()
   })
   return { db, handlers, clients, commissions, tasks, time }
 }
@@ -569,7 +596,8 @@ describe('createIpcHandlers', () => {
       commissions: {} as CommissionsRepository,
       tasks: {} as TasksRepository,
       time: {} as TimeService,
-      monitor: {} as ActivityMonitor
+      monitor: {} as ActivityMonitor,
+      data: makeData()
     })
 
     await expect(handlers[IpcChannel.clientsCreate]({ name: 'x' })).rejects.toThrow()

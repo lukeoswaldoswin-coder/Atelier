@@ -5,6 +5,7 @@ import type { ClientsRepository } from '../db/repositories/clients'
 import type { CommissionsRepository } from '../db/repositories/commissions'
 import type { TasksRepository } from '../db/repositories/tasks'
 import type { ActivityMonitor } from '../activity/activity-monitor'
+import type { DataController } from '../data/controller'
 import type { TimeService } from '../time/time-service'
 
 export type IpcHandler = (payload: unknown) => Promise<unknown>
@@ -17,6 +18,7 @@ export interface IpcHandlerDeps {
   tasks: TasksRepository
   time: TimeService
   monitor: ActivityMonitor
+  data: DataController
 }
 
 /**
@@ -27,7 +29,7 @@ export interface IpcHandlerDeps {
  * 非法数据不会越过进程边界。
  */
 export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
-  const { clients, commissions, tasks, time, monitor } = deps
+  const { clients, commissions, tasks, time, monitor, data } = deps
 
   return {
     [IpcChannel.appGetInfo]: async (payload) => {
@@ -140,6 +142,26 @@ export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
       return ipcContracts[IpcChannel.scheduleApply].output.parse({
         applied: tasks.applyPlannedDates(input)
       })
+    },
+
+    [IpcChannel.backupReveal]: async (payload) => {
+      ipcContracts[IpcChannel.backupReveal].input.parse(payload)
+      return ipcContracts[IpcChannel.backupReveal].output.parse(data.revealBackup())
+    },
+
+    [IpcChannel.dataInfo]: async (payload) => {
+      ipcContracts[IpcChannel.dataInfo].input.parse(payload)
+      return ipcContracts[IpcChannel.dataInfo].output.parse(data.info())
+    },
+
+    [IpcChannel.backupCreate]: async (payload) => {
+      ipcContracts[IpcChannel.backupCreate].input.parse(payload)
+      return ipcContracts[IpcChannel.backupCreate].output.parse(data.createBackup())
+    },
+
+    [IpcChannel.backupList]: async (payload) => {
+      ipcContracts[IpcChannel.backupList].input.parse(payload)
+      return ipcContracts[IpcChannel.backupList].output.parse(data.listBackups())
     },
 
     [IpcChannel.timeStatus]: async (payload) => {

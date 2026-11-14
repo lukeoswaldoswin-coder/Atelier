@@ -1,5 +1,9 @@
 import { z } from 'zod'
 import { IpcChannel } from './channels'
+import {
+  backupInfoSchema,
+  dataInfoSchema
+} from './data'
 import { scheduleApplyInputSchema, scheduleApplyOutputSchema } from './scheduling'
 import {
   assignableTaskSchema,
@@ -164,6 +168,23 @@ export const ipcContracts = {
   [IpcChannel.scheduleApply]: {
     input: scheduleApplyInputSchema,
     output: scheduleApplyOutputSchema
+  },
+
+  [IpcChannel.dataInfo]: {
+    input: noInputSchema,
+    output: dataInfoSchema
+  },
+  [IpcChannel.backupCreate]: {
+    input: noInputSchema,
+    output: backupInfoSchema
+  },
+  [IpcChannel.backupList]: {
+    input: noInputSchema,
+    output: z.array(backupInfoSchema)
+  },
+  [IpcChannel.backupReveal]: {
+    input: noInputSchema,
+    output: z.boolean()
   },
 
   [IpcChannel.timeStatus]: {

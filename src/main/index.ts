@@ -1,10 +1,14 @@
-import { app, BrowserWindow, dialog, ipcMain, powerMonitor, session } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, powerMonitor, session, shell } from 'electron'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createActivityMonitor, type ActivityMonitor } from './activity/activity-monitor'
 import { createWin32Probe } from './activity/win32-probe'
 import { buildAppInfo } from './app-info'
+import { createBackupService } from './data/backup-service'
+import { createDataController } from './data/controller'
+import { createDataPaths } from './data/data-paths'
 import { createDatabaseService, type DatabaseService } from './db/service'
+import { getAppliedMigrations } from './db/migrator'
 import { createIpcHandlers } from './ipc/handlers'
 import { registerIpcHandlers } from './ipc/register'
 import { createSenderGuard, getRendererAllowedEntries } from './security'
@@ -33,6 +37,7 @@ let database: DatabaseService | null = null
 let timeService: TimeService | null = null
 let timeTicker: ReturnType<typeof setInterval> | null = null
 let activityMonitor: ActivityMonitor | null = null
+let dataController: ReturnType<typeof createDataController> | null = null
 
 function getDatabaseFilePath(): string {
   return join(app.getPath('userData'), 'atelier.db')
@@ -149,6 +154,24 @@ if (!hasSingleInstanceLock) {
         timeService,
         createProbe: createWin32Probe
       })
+      const dataPaths = createDataPaths(app.getPath('userData'))
+      const backups = createBackupService({
+        paths: dataPaths,
+        getDb: () => database?.db ?? null
+      })
+      dataController = createDataController({
+        paths: dataPaths,
+        appVersion: app.getVersion(),
+        getSchemaVersion: () => {
+          if (!database) return null
+          return getAppliedMigrations(database.db).at(-1)?.id ?? null
+        },
+        backups,
+        revealPath: (path) => shell.showItemInFolder(path),
+        openDirectory: (path) => {
+          void shell.openPath(path)
+        }
+      })
       console.log(`[atelier] 数据库文件: ${database.filePath}`)
       console.log(
         `[atelier] 数据库迁移: 本次应用 ${database.migration.applied.length} 个，已存在 ${database.migration.previouslyApplied.length} 个`
@@ -171,7 +194,8 @@ if (!hasSingleInstanceLock) {
         commissions: database.commissions,
         tasks: database.tasks,
         time: timeService as TimeService,
-        monitor: activityMonitor as ActivityMonitor
+        monitor: activityMonitor as ActivityMonitor,
+        data: dataController
       }),
       { isAllowedSender: createSenderGuard(getRendererAllowedEntries()) }
     )
