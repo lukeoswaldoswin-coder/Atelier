@@ -17,7 +17,8 @@ const api: AtelierApi = {
     list: (input) => ipcRenderer.invoke(IpcChannel.clientsList, input ?? {}),
     get: (input: ByIdInput) => ipcRenderer.invoke(IpcChannel.clientsGet, input),
     update: (input) => ipcRenderer.invoke(IpcChannel.clientsUpdate, input),
-    archive: (input: ByIdInput) => ipcRenderer.invoke(IpcChannel.clientsArchive, input)
+    archive: (input: ByIdInput) => ipcRenderer.invoke(IpcChannel.clientsArchive, input),
+    unarchive: (input: ByIdInput) => ipcRenderer.invoke(IpcChannel.clientsUnarchive, input)
   },
 
   commissions: {

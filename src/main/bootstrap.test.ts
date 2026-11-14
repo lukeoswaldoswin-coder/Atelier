@@ -172,6 +172,7 @@ describe('主进程启动流程', () => {
     // 数据相关通道均已注册
     expect(state.handlers.has(IpcChannel.appGetInfo)).toBe(true)
     expect(state.handlers.has(IpcChannel.clientsCreate)).toBe(true)
+    expect(state.handlers.has(IpcChannel.clientsUnarchive)).toBe(true)
     expect(state.handlers.has(IpcChannel.commissionsCreate)).toBe(true)
 
     const win = state.windows[0] as WindowLike

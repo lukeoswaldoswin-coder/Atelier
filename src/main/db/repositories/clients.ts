@@ -19,6 +19,8 @@ export interface ClientsRepository {
   update(input: UpdateClientInput): Client | null
   /** 归档（软删除）：保留记录，只是从默认列表隐藏。 */
   archive(input: ByIdInput): Client | null
+  /** 取消归档：恢复为正常客户。幂等。 */
+  unarchive(input: ByIdInput): Client | null
 }
 
 /**
@@ -103,6 +105,20 @@ export function createClientsRepository(db: AppDatabase): ClientsRepository {
 
       const now = new Date().toISOString()
       db.prepare('UPDATE clients SET archived_at = @now, updated_at = @now WHERE id = @id').run({
+        id: input.id,
+        now
+      })
+      return getById(input.id)
+    },
+
+    unarchive(input: ByIdInput): Client | null {
+      const existing = getById(input.id)
+      if (!existing) return null
+      // 未归档时直接返回，避免无意义地刷新 updated_at
+      if (existing.archivedAt === null) return existing
+
+      const now = new Date().toISOString()
+      db.prepare('UPDATE clients SET archived_at = NULL, updated_at = @now WHERE id = @id').run({
         id: input.id,
         now
       })

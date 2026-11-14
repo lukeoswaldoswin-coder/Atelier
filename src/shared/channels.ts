@@ -10,6 +10,7 @@ export const IpcChannel = {
   clientsGet: 'clients:get',
   clientsUpdate: 'clients:update',
   clientsArchive: 'clients:archive',
+  clientsUnarchive: 'clients:unarchive',
 
   commissionsCreate: 'commissions:create',
   commissionsList: 'commissions:list',

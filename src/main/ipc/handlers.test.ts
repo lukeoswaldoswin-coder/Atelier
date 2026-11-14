@@ -83,6 +83,28 @@ describe('createIpcHandlers', () => {
     db.close()
   })
 
+  it('clients:unarchive 恢复客户并重新出现在默认列表', async () => {
+    const { handlers, db } = setup()
+    const created = (await handlers[IpcChannel.clientsCreate]({ name: '归档客户' })) as Client
+
+    const archived = (await handlers[IpcChannel.clientsArchive]({ id: created.id })) as Client
+    expect(archived.archivedAt).not.toBeNull()
+    expect((await handlers[IpcChannel.clientsList]({})) as Client[]).toHaveLength(0)
+
+    const restored = (await handlers[IpcChannel.clientsUnarchive]({ id: created.id })) as Client
+    expect(restored.archivedAt).toBeNull()
+
+    const list = (await handlers[IpcChannel.clientsList]({})) as Client[]
+    expect(list.map((client) => client.id)).toContain(created.id)
+    db.close()
+  })
+
+  it('clients:unarchive 拒绝非法 id', async () => {
+    const { handlers, db } = setup()
+    await expect(handlers[IpcChannel.clientsUnarchive]({ id: 'not-a-uuid' })).rejects.toThrow()
+    db.close()
+  })
+
   it('commissions:create 默认按“未报价”处理', async () => {
     const { handlers, db } = setup()
     const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Commission } from '@shared/domain'
 import { getAtelierApi } from '@/lib/ipc'
-import { emptyListState, toErrorMessage, type LoadableList } from './load-state'
+import { formatIpcError } from '@/lib/ipc-error'
+import { emptyListState, type LoadableList } from './load-state'
 
 export interface CommissionsListResult extends LoadableList<Commission> {
   reload: () => void
@@ -26,7 +27,7 @@ export function useCommissions(includeArchived = false): CommissionsListResult {
       }
     } catch (error) {
       if (currentRequest === requestId.current) {
-        setState({ status: 'error', rows: [], error: toErrorMessage(error) })
+        setState({ status: 'error', rows: [], error: formatIpcError(error) })
       }
     }
   }, [includeArchived])

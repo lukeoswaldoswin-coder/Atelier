@@ -29,6 +29,7 @@ export interface AtelierApi {
     get(input: ByIdInput): Promise<Client | null>
     update(input: UpdateClientInput): Promise<Client | null>
     archive(input: ByIdInput): Promise<Client | null>
+    unarchive(input: ByIdInput): Promise<Client | null>
   }
 
   commissions: {

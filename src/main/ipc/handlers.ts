@@ -54,6 +54,11 @@ export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
       return ipcContracts[IpcChannel.clientsArchive].output.parse(clients.archive(input))
     },
 
+    [IpcChannel.clientsUnarchive]: async (payload) => {
+      const input = ipcContracts[IpcChannel.clientsUnarchive].input.parse(payload)
+      return ipcContracts[IpcChannel.clientsUnarchive].output.parse(clients.unarchive(input))
+    },
+
     [IpcChannel.commissionsCreate]: async (payload) => {
       const input = ipcContracts[IpcChannel.commissionsCreate].input.parse(payload)
       return commissionSchema.parse(commissions.create(input))

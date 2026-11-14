@@ -68,6 +68,10 @@ export const ipcContracts = {
     input: byIdInputSchema,
     output: clientSchema.nullable()
   },
+  [IpcChannel.clientsUnarchive]: {
+    input: byIdInputSchema,
+    output: clientSchema.nullable()
+  },
 
   [IpcChannel.commissionsCreate]: {
     input: createCommissionInputSchema,
