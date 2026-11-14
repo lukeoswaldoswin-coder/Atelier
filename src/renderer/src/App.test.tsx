@@ -73,9 +73,9 @@ describe('应用外壳', () => {
     render(<App />)
     await screen.findByTestId('app-info')
 
-    await user.click(screen.getByRole('button', { name: /日历/ }))
+    await user.click(screen.getByRole('button', { name: /工时记录/ }))
 
-    expect(screen.getByText('计划在 P3 阶段实现')).toBeInTheDocument()
+    expect(screen.getByText('计划在 P4 阶段实现')).toBeInTheDocument()
   })
 
   it('主题切换会更新根元素与按钮文案', async () => {

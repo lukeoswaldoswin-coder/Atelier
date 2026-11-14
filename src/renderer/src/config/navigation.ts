@@ -65,7 +65,7 @@ export const navGroups: readonly NavGroup[] = [
         description: '月视图 / 周视图、任务计划日期与委托截止日期。',
         icon: CalendarDays,
         phase: 'P3',
-        implemented: false
+        implemented: true
       },
       {
         id: 'time',

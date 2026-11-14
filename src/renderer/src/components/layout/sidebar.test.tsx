@@ -37,10 +37,13 @@ describe('侧边栏', () => {
   it('未实现的页面标注所属阶段，已实现的不标注', () => {
     render(<Sidebar />)
 
-    const calendar = screen.getByRole('button', { name: /日历/ })
-    expect(calendar).toHaveTextContent('P3')
+    const settings = screen.getByRole('button', { name: /设置/ })
+    expect(settings).toHaveTextContent('P6')
 
     const dashboard = screen.getByRole('button', { name: /概览/ })
     expect(dashboard).not.toHaveTextContent('P0')
+
+    const calendar = screen.getByRole('button', { name: /日历/ })
+    expect(calendar).not.toHaveTextContent('P3')
   })
 })
