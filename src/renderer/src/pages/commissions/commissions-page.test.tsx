@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { Client, Commission } from '@shared/domain'
 import { makeClient, makeCommission } from '@/test-utils/fixtures'
@@ -8,7 +8,12 @@ import { CommissionsPage } from './commissions-page'
 
 type ListMock<T> = ReturnType<typeof vi.fn<() => Promise<T[]>>>
 
-function installApi(commissionList: ListMock<Commission>, clientList: ListMock<Client>) {
+interface ActionMocks {
+  create?: ReturnType<typeof vi.fn>
+  update?: ReturnType<typeof vi.fn>
+}
+
+function installApi(commissionList: ListMock<Commission>, clientList: ListMock<Client>, actions: ActionMocks = {}) {
   Object.defineProperty(window, 'atelier', {
     configurable: true,
     value: {
@@ -18,13 +23,14 @@ function installApi(commissionList: ListMock<Commission>, clientList: ListMock<C
         list: clientList,
         get: vi.fn(),
         update: vi.fn(),
-        archive: vi.fn()
+        archive: vi.fn(),
+        unarchive: vi.fn()
       },
       commissions: {
-        create: vi.fn(),
+        create: actions.create ?? vi.fn(),
         list: commissionList,
         get: vi.fn(),
-        update: vi.fn(),
+        update: actions.update ?? vi.fn(),
         archive: vi.fn()
       }
     }
@@ -32,7 +38,11 @@ function installApi(commissionList: ListMock<Commission>, clientList: ListMock<C
 }
 
 beforeEach(() => {
-  useCommissionsUiStore.setState({ listScrollTop: 0, includeArchived: false })
+  useCommissionsUiStore.setState({
+    tab: 'commissions',
+    listScrollTop: 0,
+    includeArchived: false
+  })
 })
 
 afterEach(() => {
@@ -129,14 +139,65 @@ describe('委托列表页', () => {
   })
 
   it('客户数据读取失败时整体报错，而不是把客户名显示为未知', async () => {
-    installApi(vi.fn(async () => [makeCommission({ title: '委托' })]), vi.fn(async () => {
-      throw new Error('客户查询失败')
-    }))
+    installApi(
+      vi.fn(async () => [makeCommission({ title: '委托' })]),
+      vi.fn(async () => {
+        throw new Error('客户查询失败')
+      })
+    )
 
     render(<CommissionsPage />)
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('客户查询失败')
     expect(screen.queryByText('未知客户')).not.toBeInTheDocument()
+  })
+
+  it('新建委托成功后列表即时更新', async () => {
+    const client = makeClient({ name: '小夏' })
+    const created = makeCommission({ title: '新委托', clientId: client.id })
+    const commissionList = vi
+      .fn<() => Promise<Commission[]>>()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([created])
+    const create = vi.fn(async () => created)
+
+    installApi(commissionList, vi.fn(async () => [client]), { create })
+
+    const user = userEvent.setup()
+    render(<CommissionsPage />)
+
+    await screen.findByText('还没有委托')
+    await user.click(screen.getByRole('button', { name: '新建委托' }))
+
+    const sheet = await screen.findByTestId('sheet')
+    await user.selectOptions(within(sheet).getByLabelText('客户 *'), client.id)
+    await user.type(within(sheet).getByLabelText('委托名称 *'), '新委托')
+    await user.type(within(sheet).getByLabelText('委托类型 *'), '插画')
+    await user.click(within(sheet).getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('新委托')).toBeInTheDocument()
+  })
+
+  it('新建委托的客户下拉不包含已归档客户', async () => {
+    const active = makeClient({ name: '小夏' })
+    const archived = makeClient({
+      id: '22222222-2222-4222-8222-222222222222',
+      name: '已归档客户',
+      archivedAt: '2026-06-01T00:00:00.000Z'
+    })
+
+    installApi(vi.fn(async () => []), vi.fn(async () => [active, archived]))
+
+    const user = userEvent.setup()
+    render(<CommissionsPage />)
+
+    await screen.findByText('还没有委托')
+    await user.click(screen.getByRole('button', { name: '新建委托' }))
+
+    const select = await screen.findByLabelText('客户 *')
+    expect(within(select).getByRole('option', { name: '小夏' })).toBeInTheDocument()
+    expect(within(select).queryByRole('option', { name: '已归档客户' })).not.toBeInTheDocument()
   })
 })

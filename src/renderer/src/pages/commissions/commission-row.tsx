@@ -24,34 +24,40 @@ const TONE_CLASS: Record<PaymentTone, string> = {
   success: 'text-success'
 }
 
-/** 列表只读行：委托名为主要信息，客户名为次要信息。 */
+/** 列表行：委托名为主要信息，客户名为次要信息。点击进入编辑面板。 */
 export function CommissionRow({
   commission,
   clientsById,
-  context
+  context,
+  onSelect
 }: {
   commission: Commission
   clientsById: ReadonlyMap<string, Client>
   context: QueryContext
+  onSelect: (commission: Commission) => void
 }) {
   const overdue = isCommissionOverdue(commission, context)
   const payment = paymentPresentation(commission)
 
   return (
-    <div
-      className="grid grid-cols-[minmax(0,1fr)_92px_128px_190px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40"
+    <button
+      type="button"
+      onClick={() => onSelect(commission)}
+      className="grid w-full grid-cols-[minmax(0,1fr)_92px_128px_190px] items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none"
       data-testid="commission-row"
     >
-      <div className="min-w-0">
-        <div className="truncate text-sm font-medium text-foreground">{commission.title}</div>
-        <div className="truncate text-xs text-muted-foreground">{clientNameOf(commission, clientsById)}</div>
-      </div>
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-medium text-foreground">{commission.title}</span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {clientNameOf(commission, clientsById)}
+        </span>
+      </span>
 
-      <div>
+      <span>
         <Badge variant={STATUS_VARIANT[commission.status]}>{statusLabel(commission.status)}</Badge>
-      </div>
+      </span>
 
-      <div
+      <span
         className={cn(
           'flex min-w-0 items-center gap-1.5 text-xs',
           overdue ? 'text-warning' : 'text-muted-foreground'
@@ -61,12 +67,14 @@ export function CommissionRow({
         {overdue ? (
           <span className="shrink-0 rounded bg-warning/15 px-1 py-0.5 text-[10px] leading-none">逾期</span>
         ) : null}
-      </div>
+      </span>
 
-      <div className="min-w-0">
-        <div className={cn('text-xs font-medium', TONE_CLASS[payment.tone])}>{payment.label}</div>
-        <div className="truncate text-[11px] text-muted-foreground">{payment.detail}</div>
-      </div>
-    </div>
+      <span className="min-w-0">
+        <span className={cn('block text-xs font-medium', TONE_CLASS[payment.tone])}>
+          {payment.label}
+        </span>
+        <span className="block truncate text-[11px] text-muted-foreground">{payment.detail}</span>
+      </span>
+    </button>
   )
 }

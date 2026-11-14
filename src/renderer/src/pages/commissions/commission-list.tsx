@@ -20,6 +20,7 @@ interface CommissionsListProps {
   clientsById: ReadonlyMap<string, Client>
   context: QueryContext
   onRetry: () => void
+  onSelect: (commission: Commission) => void
 }
 
 export function CommissionsList({
@@ -29,7 +30,8 @@ export function CommissionsList({
   totalCount,
   clientsById,
   context,
-  onRetry
+  onRetry,
+  onSelect
 }: CommissionsListProps) {
   if (status === 'loading') return <CommissionSkeletonList />
   if (status === 'error') return <CommissionErrorState message={error ?? '未知错误'} onRetry={onRetry} />
@@ -53,6 +55,7 @@ export function CommissionsList({
             commission={commission}
             clientsById={clientsById}
             context={context}
+            onSelect={onSelect}
           />
         ))}
       </div>
