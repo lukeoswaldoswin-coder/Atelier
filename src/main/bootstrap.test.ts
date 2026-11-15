@@ -246,6 +246,8 @@ describe('主进程启动流程', () => {
     expect(state.trays).toHaveLength(1)
     const closeHandler = state.windowListeners.get('close')
     expect(typeof closeHandler).toBe('function')
+    // 系统关机/注销时必须能放行关闭
+    expect(typeof state.windowListeners.get('session-end')).toBe('function')
 
     const preventDefault = vi.fn()
     closeHandler?.({ preventDefault })

@@ -82,6 +82,11 @@ function setupTray(win: BrowserWindow): void {
       appTray?.notifyHidden()
     }
   })
+
+  // Windows 关机/注销：必须放行关闭，否则关窗拦截会挡住系统关机
+  win.on('session-end', () => {
+    isQuitting = true
+  })
 }
 
 function startTimeTicker(): void {
