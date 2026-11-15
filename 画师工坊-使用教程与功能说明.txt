@@ -11,7 +11,7 @@
 
 最终安装包位于：
 
-C:\Users\11415\AppData\Local\Atelier\release\画师工坊-Setup-0.1.3.exe
+%LOCALAPPDATA%\Atelier\release\画师工坊-Setup-0.1.3.exe
 
 也可以按 Win + R，输入：
 

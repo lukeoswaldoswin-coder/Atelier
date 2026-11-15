@@ -10,3 +10,40 @@ Thumbs.db
 .smoke/
 .pnpm-store/
 .electron-cache/
+
+# ---- 环境变量与凭据 ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+*.crt
+*.cer
+secrets.json
+credentials.json
+id_rsa
+id_ed25519
+
+# ---- 本地数据库（复现问题时可能被复制进项目目录）----
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# ---- 备份与压缩包 ----
+*.bak
+*.backup
+*.zip
+*.7z
+*.rar
+
+# ---- 编辑器与构建缓存 ----
+.vscode/
+.idea/
+*.tsbuildinfo
+
+# ---- 实机验证证据（私人材料，不随公开仓库发布）----
+docs/verify-*/

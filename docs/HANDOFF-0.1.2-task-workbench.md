@@ -19,7 +19,7 @@
 构建命令（`pnpm` 不在 PATH 时用 DSH 自带 node）：
 
 ```powershell
-$node = "C:\Users\11415\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe"
+$node = "$env:USERPROFILE\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe"
 & $node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.node.json
 & $node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.json
 & $node .\node_modules\vitest\vitest.mjs run
@@ -152,8 +152,8 @@ src/renderer/src/pages/tasks/tasks-page.test.tsx  11 条（页面行为）
 
 - 所有测试用 `mkdtempSync()` 或 `%LOCALAPPDATA%\Atelier\P6.6-测试数据` 副本
 - 真实库全程只读；升级前后 SHA256 与备份**完全一致**
-- 备份：`%APPDATA%\atelier\atelier.db.bak-before-0.1.2-2026-11-15T14-45-12`（143,360 bytes）
-- 数据完整：9 客户 / 4 委托 / 1 任务 / 18 条工时记录
+- 备份：升级前已自动生成（大小与源库一致）
+- 数据完整：客户、委托、任务、工时记录行数与升级前一致
 
 ## 五、交付物
 
@@ -170,7 +170,7 @@ SHA256: 4F3C3DAA7BAEF1860C6E3ED8CA4801DBEF9860D57583DDA039EE25AAA1DE0AC1
 **用户设备已安装版本**
 
 ```
-C:\Users\11415\AppData\Local\Programs\Atelier\
+%LOCALAPPDATA%\Programs\Atelier\
 Atelier.exe 版本 0.1.2
 ```
 
@@ -204,7 +204,6 @@ b75364f 功能: 任务计时复用绘画软件活跃时间，杜绝重复记账�
   scripts/verify-p66.mjs
   scripts/verify-p66-db.mjs
   scripts/verify-installed.mjs
-  docs/verify-p66/report.json
   docs/P6.6-REPORT.md
 
 修改：

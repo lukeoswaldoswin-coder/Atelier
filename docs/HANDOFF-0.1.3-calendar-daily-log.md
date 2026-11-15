@@ -10,17 +10,19 @@
 | 项目目录 | `D:\Atelier\project` |
 | 技术栈 | Electron 44.7 + React 19 + TypeScript + better-sqlite3 |
 | 版本 | **0.1.3**（未进入 P7） |
-| 当前 HEAD | `edf3145` 发布: 版本号升级到 0.1.3（P6.7 日历每日创作记录） |
 | P6 基线 | 注解标签 `p6-baseline` → `f50060e`（**未移动**） |
-| P6.6 基线 | 注解标签 `p6.6-baseline` → `271e2d1`（**未移动**） |
-| P6.7 基线 | **尚未创建**（本轮用户已验收功能，但未要求打标签） |
-| 标签总数 | **14 个**（未新增、未移动） |
+| P6.6 基线 | 注解标签 `p6.6-baseline`（**未移动**，指向 0.1.2 发布提交） |
+| P6.7 基线 | 注解标签 `p6.7-baseline`（指向 0.1.3 发布提交） |
+| 标签总数 | **15 个**（未新增、未移动） |
 | 工作区 | 干净 |
+
+> 说明：本仓库在公开前重写过历史，历史文档中的 7 位短 SHA 可能与当前提交不完全对应，
+> 请以提交标题与基线标签为准。
 
 构建命令（`pnpm` 不在 PATH 时用 DSH 自带 node）：
 
 ```powershell
-$node = "C:\Users\11415\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe"
+$node = "$env:USERPROFILE\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe"
 & $node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.node.json
 & $node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.json
 & $node .\node_modules\vitest\vitest.mjs run
@@ -177,16 +179,12 @@ src/main/time/task-session-segments.test.ts               10 条（真实 SQLite
 
 | 项目 | 迁移前 | 迁移后 |
 |---|---|---|
-| 客户 | 9 | 9 |
-| 委托 | 4 | 4 |
-| 任务 | 1 | 1 |
-| 工时记录 | 23 | 23 |
-| 工时总秒数 | 11159 | 11159 |
+| 各项行数 | 完全一致 | 完全一致 |
 | 外键违规 | 0 | 0 |
 | 迁移数 | 5 | 6 |
 
-迁移前自动备份：`%APPDATA%\atelier\atelier.db.bak-2026-11-15T12-30-10-588Z`（143,360 bytes），
-内容确认为 5 个迁移 + 23 条工时 + 11159 秒，与迁移后完全一致。
+迁移前已自动生成备份（大小与源库一致），
+内容确认为 5 个迁移，数据量与迁移后完全一致。
 
 ### 4.3 实机验收
 
@@ -213,7 +211,7 @@ SHA256: C5DDEE98B0C7C5D52A414009349D1A78C87A8ADFBEF8920C8E82BDD6EDAE31C9
 **用户设备已安装版本**
 
 ```
-C:\Users\11415\AppData\Local\Programs\Atelier\Atelier.exe
+%LOCALAPPDATA%\Programs\Atelier\Atelier.exe
 ProductVersion 0.1.3.0 · FileVersion 0.1.3
 桌面 + 开始菜单「画师工坊」快捷方式均指向该路径
 ```
@@ -230,18 +228,18 @@ ProductVersion 0.1.3.0 · FileVersion 0.1.3
 ## 六、Git 提交记录（本轮）
 
 ```
-edf3145 发布: 版本号升级到 0.1.3（P6.7 日历每日创作记录）
-2846b19 测试: P6.7 实机检查启动器（隔离测试数据，不触碰正式库）
-be2c3b4 文档: P6.7 日历每日创作记录与跨模块联动交付报告
-d013954 功能: 日历每日创作记录与跨模块跳转（P6.7）
-18e9e9b 功能: 日历每日工时聚合查询与两个新 IPC（P6.7）
-100e577 功能: 活跃片段明细表与片段落库，支撑每日工时归属（P6.7）
-f665075 功能: 每日工时按自然日归属的共享算法（P6.7）
-fadc22e 文档: 归档 0.1.2 绘画任务工作台与任务关联计时的交接说明   ← 本轮起点
+（0.1.3 发布提交）发布: 版本号升级到 0.1.3（P6.7 日历每日创作记录）
+（测试）测试: P6.7 实机检查启动器（隔离测试数据，不触碰正式库）
+（文档）文档: P6.7 日历每日创作记录与跨模块联动交付报告
+（功能）功能: 日历每日创作记录与跨模块跳转（P6.7）
+（功能）功能: 日历每日工时聚合查询与两个新 IPC（P6.7）
+（功能）功能: 活跃片段明细表与片段落库，支撑每日工时归属（P6.7）
+（功能）功能: 每日工时按自然日归属的共享算法（P6.7）
+（文档）文档: 归档 0.1.2 绘画任务工作台与任务关联计时的交接说明   ← 本轮起点
 ```
 
-`p6-baseline` 仍是 `f50060e`、`p6.6-baseline` 仍是 `271e2d1`，
-历史未改写、未 amend。**`p6.7-baseline` 尚未创建**。
+`p6-baseline` 与 `p6.6-baseline` 均未移动；`p6.7-baseline` 已创建，
+指向 0.1.3 发布提交。
 
 ## 七、本轮改动文件清单
 
@@ -343,8 +341,7 @@ P4 手动计时与自动监测的原有行为、其他页面视觉设计。
 
 ## 十、遗留 / 待确认
 
-1. **`p6.7-baseline` 标签尚未创建**。用户已验收 0.1.3，但未明确要求打标签；
-   如需要，应指向 `edf3145`。
+1. `p6.7-baseline` 标签已创建，指向 0.1.3 发布提交。
 2. `%LOCALAPPDATA%\Atelier\P6.7-test-data` 如存在，是本轮实机检查的测试副本，
    可删除，不影响已安装正式版。
 3. 上轮遗留的 `P6.6-测试数据`、`P6.5.1-测试版`、`P6.5.1-测试数据` 目录同样仍在。
@@ -378,9 +375,9 @@ P4 手动计时与自动监测的原有行为、其他页面视觉设计。
 日历每日创作记录、跨模块联动与 0.1.3 发布情况。
 
 当前状态：
-- 版本 0.1.3，HEAD edf3145，工作区干净
-- p6-baseline 指向 f50060e，p6.6-baseline 指向 271e2d1，两者都不得移动
-- p6.7-baseline 尚未创建（用户已验收功能，如需打标签指向 edf3145）
+- 版本 0.1.3，HEAD 以 git log 为准，工作区干净
+- p6-baseline 指向 f50060e，p6.6-baseline 指向 0.1.2 发布提交，两者都不得移动
+- p6.7-baseline 已创建，指向 0.1.3 发布提交
 - 数据库已有迁移 006（time_entry_segments 活跃片段明细表）
 - 不进入 P7，只处理用户明确反馈的问题
 

@@ -92,7 +92,7 @@ node_modules/electron-builder/cli.js --win --dir
 ### 4.2 实机验证（CDP 真实鼠标事件，非 jsdom 模拟）
 
 方式：Medium 副本 + `ATELIER_USER_DATA_DIR` 临时 userData + `--remote-debugging-port=9222`
-+ `Input.dispatchMouseEvent` 派发真实鼠标事件。截图存 `docs/verify-p6.5/`。
++ `Input.dispatchMouseEvent` 派发真实鼠标事件。截图仅本地留存，不随公开仓库发布。
 
 **P6.5 结果**：全选 5 条未分配、已归属勾选 0；框选实时勾选 3 条；复选框/归属/删除起手均不启动框选；
 列表外松开正常收尾；切筛选后按钮状态正确。
@@ -114,13 +114,13 @@ node_modules/electron-builder/cli.js --win --dir
 ### 4.3 安装包验证
 
 - 临时目录静默安装 → 退出码 0 → 启动 → UA `atelier/0.1.1` → 按钮切换与文字框选正常 → 卸载成功
-- 安装版实测：6 条记录、按钮切换、时间文字拖拽出矩形且 `getSelection()` 为空
+- 安装版实测：工时记录页正常渲染、按钮切换、时间文字拖拽出矩形且 `getSelection()` 为空
 
 ### 4.4 数据安全
 
-- 所有测试用临时 userData 副本；操作前后逐字段对比临时库与真实库：**12 条、差异 0**
-- 真实库 `atelier.db` 135,168 bytes，mtime 全程保持 `2026-11-15 11:22:36` 未变
-- 升级前备份：`%APPDATA%\atelier\atelier.db.bak-before-0.1.1-2026-11-15T12-10-49`（135,168 bytes）
+- 所有测试用临时 userData 副本；操作前后逐字段对比临时库与真实库：**差异 0**
+- 真实库 `atelier.db` 大小与 mtime 全程未变
+- 升级前已自动生成备份（大小与源库一致）
 
 ## 五、交付物
 
@@ -135,7 +135,7 @@ SHA256: AE1A39D35EA31DCD1A4F022770D12D1E7218FD547D7D620F921C869E5E2B33FD
 
 **用户设备已安装版本**
 ```
-C:\Users\11415\AppData\Local\Programs\Atelier\
+%LOCALAPPDATA%\Programs\Atelier\
 Atelier.exe 版本 0.1.1
 ```
 桌面 + 开始菜单「画师工坊」快捷方式均指向该路径。
@@ -160,7 +160,6 @@ src/renderer/src/pages/time/time-page.test.tsx   新增 11 条用例（共 27 �
 build/atelier.iss                                默认 AppVersion → 0.1.1
 package.json                                     version → 0.1.1
 画师工坊-使用教程与功能说明.txt                    版本号与安装包名同步
-docs/verify-p6.5/**                              实机验证证据（7+6 张截图 + 说明）
 ```
 
 未触碰：数据库 schema/迁移、IPC、数据模型、批量归属/合并业务逻辑、备份/恢复/CSV/安装逻辑。

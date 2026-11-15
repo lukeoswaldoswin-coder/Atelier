@@ -113,7 +113,7 @@ pnpm package:inno     # 约 3–4 分钟，产出 dist + %LOCALAPPDATA%\Atelier\
 
 ## 六、交付安装包
 
-- 路径：`C:\Users\11415\AppData\Local\Atelier\release\画师工坊-Setup-0.1.0.exe`
+- 路径：`%LOCALAPPDATA%\Atelier\release\画师工坊-Setup-0.1.0.exe`
 - 大小：125,958,328 bytes
 - SHA256：`95FE4E2EA922102BFB7C54620EC28446142927DB4F0299CD4D2776C7BE9C9FDD`
 - 完整性：Medium（无 Low Mandatory Level 标签）
