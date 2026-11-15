@@ -443,6 +443,95 @@ export const timeStatusOutputSchema = z.object({
 })
 export type TimeStatusOutput = z.infer<typeof timeStatusOutputSchema>
 
+// ---------------------------------------------------------------------------
+// 任务计时会话（P6.6）
+// ---------------------------------------------------------------------------
+
+/**
+ * 任务计时会话的运行状态。
+ * 只有「手动暂停」会进入 paused；切换到浏览器、空闲、休眠都不会结束会话。
+ */
+export const taskSessionStateSchema = z.enum(['running', 'paused'])
+export type TaskSessionState = z.infer<typeof taskSessionStateSchema>
+
+/**
+ * 任务计时会话视图。
+ *
+ * 会话本身仍然是一条 time_entries 记录（source='auto'、task_id 非空），
+ * 因此工时统计、归属、合并、导出全部沿用 P4 既有逻辑，不需要新表。
+ */
+export const taskSessionStatusSchema = z.object({
+  /** 会话对应的工时记录（进行中，尚未结束） */
+  entry: timeEntryViewSchema,
+  taskId: uuidSchema,
+  state: taskSessionStateSchema,
+  /** 当前是否正在累计（绘画软件活跃且未被手动暂停） */
+  accumulating: z.boolean(),
+  /** 当前判定为活跃的绘画软件 key */
+  activeAppKey: z.string().nullable(),
+  /** 实际累计工时（只统计绘画软件活跃时间） */
+  accumulatedSeconds: z.number().int().nonnegative(),
+  /** 会话持续时间（从点击开始到现在的墙钟时间，仅作辅助显示） */
+  sessionSeconds: z.number().int().nonnegative(),
+  startedAt: utcIsoSchema
+})
+export type TaskSessionStatus = z.infer<typeof taskSessionStatusSchema>
+
+/** 时间状态 + 任务计时会话，供渲染进程一次读取。 */
+export const timeStatusViewSchema = timeStatusOutputSchema.extend({
+  /** 没有任务计时会话时为 null（P4 时期的调用方可省略该字段） */
+  taskSession: taskSessionStatusSchema.nullish()
+})
+export type TimeStatusView = z.infer<typeof timeStatusViewSchema>
+
+export const timeStartTaskInputSchema = z.strictObject({
+  taskId: uuidSchema,
+  /** 已有其它任务在计时时，是否先结算旧任务再开始新任务 */
+  replaceCurrent: z.boolean().default(false)
+})
+export type TimeStartTaskInput = z.infer<typeof timeStartTaskInputSchema>
+
+// ---------------------------------------------------------------------------
+// 绘画任务工作台（P6.6）
+// ---------------------------------------------------------------------------
+
+export const workbenchCommissionSchema = z.object({
+  id: uuidSchema,
+  title: z.string().min(1),
+  status: commissionStatusSchema,
+  archivedAt: utcIsoSchema.nullable()
+})
+export type WorkbenchCommission = z.infer<typeof workbenchCommissionSchema>
+
+export const workbenchTaskSchema = z.object({
+  task: taskSchema,
+  commission: workbenchCommissionSchema,
+  clientName: z.string().min(1),
+  /** 已完成记录的实际累计工时（秒） */
+  actualSeconds: z.number().int().nonnegative()
+})
+export type WorkbenchTask = z.infer<typeof workbenchTaskSchema>
+
+export const workbenchInputSchema = z.strictObject({
+  /** 是否包含已完成任务（默认只列待处理/进行中） */
+  includeDone: z.boolean().default(false),
+  /** 是否包含已归档任务（默认不显示） */
+  includeArchived: z.boolean().default(false)
+})
+export type WorkbenchInput = z.infer<typeof workbenchInputSchema>
+
+export const workbenchOutputSchema = z.object({
+  /** 待处理 + 进行中，工作台主区域 */
+  pending: z.array(workbenchTaskSchema),
+  /** 已完成，折叠区展示 */
+  done: z.array(workbenchTaskSchema)
+})
+export type WorkbenchOutput = z.infer<typeof workbenchOutputSchema>
+
+/** 结束任务计时后返回结算完成的工时记录。 */
+export const taskSessionStopOutputSchema = timeEntryViewSchema
+export type TaskSessionStopOutput = z.infer<typeof taskSessionStopOutputSchema>
+
 export const timeTaskTotalsInputSchema = z.strictObject({
   taskIds: z.array(uuidSchema).max(200)
 })

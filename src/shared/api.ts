@@ -18,11 +18,14 @@ import type {
   TimeEntryView,
   TimeListInput,
   TimeMergeInput,
-  TimeStatusOutput,
+  TimeStartTaskInput,
+  TimeStatusView,
   TimeSummaryInput,
   TimeSummaryOutput,
   TimeTaskTotalsOutput,
   TimeUpdateInput,
+  WorkbenchInput,
+  WorkbenchOutput,
   UpdateClientInput,
   UpdateCommissionInput,
   UpdateTaskInput
@@ -69,6 +72,8 @@ export interface AtelierApi {
     archive(input: ByIdInput): Promise<Task | null>
     unarchive(input: ByIdInput): Promise<Task | null>
     listAll(): Promise<AssignableTask[]>
+    /** 绘画任务工作台：跨委托聚合任务 */
+    workbench(input?: Partial<WorkbenchInput>): Promise<WorkbenchOutput>
   }
 
   calendar: {
@@ -96,11 +101,11 @@ export interface AtelierApi {
   }
 
   time: {
-    status(): Promise<TimeStatusOutput>
-    start(input: { taskId: string }): Promise<TimeStatusOutput>
-    pause(): Promise<TimeStatusOutput>
-    resume(): Promise<TimeStatusOutput>
-    stop(): Promise<TimeStatusOutput>
+    status(): Promise<TimeStatusView>
+    start(input: { taskId: string }): Promise<TimeStatusView>
+    pause(): Promise<TimeStatusView>
+    resume(): Promise<TimeStatusView>
+    stop(): Promise<TimeStatusView>
     list(input: TimeListInput): Promise<TimeEntryView[]>
     summary(input: TimeSummaryInput): Promise<TimeSummaryOutput>
     update(input: TimeUpdateInput): Promise<TimeEntryView | null>
@@ -108,6 +113,12 @@ export interface AtelierApi {
     remove(input: ByIdInput): Promise<boolean>
     merge(input: TimeMergeInput): Promise<TimeEntryView>
     taskTotals(input: { taskIds: string[] }): Promise<TimeTaskTotalsOutput>
+
+    /** 任务计时会话（P6.6）：只累计绘画软件活跃时间 */
+    startTask(input: TimeStartTaskInput): Promise<TimeStatusView>
+    pauseTask(): Promise<TimeStatusView>
+    resumeTask(): Promise<TimeStatusView>
+    stopTask(): Promise<TimeStatusView>
   }
 
   monitor: {

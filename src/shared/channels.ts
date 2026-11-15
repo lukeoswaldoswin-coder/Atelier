@@ -26,6 +26,7 @@ export const IpcChannel = {
   tasksArchive: 'tasks:archive',
   tasksUnarchive: 'tasks:unarchive',
   tasksListAll: 'tasks:list-all',
+  tasksWorkbench: 'tasks:workbench',
 
   calendarTasks: 'calendar:tasks',
 
@@ -52,6 +53,10 @@ export const IpcChannel = {
   timeDelete: 'time:delete',
   timeMerge: 'time:merge',
   timeTaskTotals: 'time:task-totals',
+  timeStartTask: 'time:start-task',
+  timeTaskPause: 'time:task-pause',
+  timeTaskResume: 'time:task-resume',
+  timeTaskStop: 'time:task-stop',
 
   monitorStatus: 'monitor:status',
   monitorSetEnabled: 'monitor:set-enabled',

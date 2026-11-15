@@ -33,12 +33,15 @@ import {
   timeEntryViewSchema,
   timeListInputSchema,
   timeMergeInputSchema,
-  timeStatusOutputSchema,
+  timeStartTaskInputSchema,
+  timeStatusViewSchema,
   timeSummaryInputSchema,
   timeSummaryOutputSchema,
   timeTaskTotalsInputSchema,
   timeTaskTotalsOutputSchema,
   timeUpdateInputSchema,
+  workbenchInputSchema,
+  workbenchOutputSchema,
   updateClientInputSchema,
   updateCommissionInputSchema,
   updateTaskInputSchema,
@@ -163,6 +166,10 @@ export const ipcContracts = {
     input: noInputSchema,
     output: z.array(assignableTaskSchema)
   },
+  [IpcChannel.tasksWorkbench]: {
+    input: workbenchInputSchema,
+    output: workbenchOutputSchema
+  },
 
   [IpcChannel.calendarTasks]: {
     input: calendarTasksInputSchema,
@@ -206,23 +213,23 @@ export const ipcContracts = {
 
   [IpcChannel.timeStatus]: {
     input: noInputSchema,
-    output: timeStatusOutputSchema
+    output: timeStatusViewSchema
   },
   [IpcChannel.timeStart]: {
     input: timeStartInputSchema,
-    output: timeStatusOutputSchema
+    output: timeStatusViewSchema
   },
   [IpcChannel.timePause]: {
     input: noInputSchema,
-    output: timeStatusOutputSchema
+    output: timeStatusViewSchema
   },
   [IpcChannel.timeResume]: {
     input: noInputSchema,
-    output: timeStatusOutputSchema
+    output: timeStatusViewSchema
   },
   [IpcChannel.timeStop]: {
     input: noInputSchema,
-    output: timeStatusOutputSchema
+    output: timeStatusViewSchema
   },
   [IpcChannel.timeList]: {
     input: timeListInputSchema,
@@ -251,6 +258,22 @@ export const ipcContracts = {
   [IpcChannel.timeTaskTotals]: {
     input: timeTaskTotalsInputSchema,
     output: timeTaskTotalsOutputSchema
+  },
+  [IpcChannel.timeStartTask]: {
+    input: timeStartTaskInputSchema,
+    output: timeStatusViewSchema
+  },
+  [IpcChannel.timeTaskPause]: {
+    input: noInputSchema,
+    output: timeStatusViewSchema
+  },
+  [IpcChannel.timeTaskResume]: {
+    input: noInputSchema,
+    output: timeStatusViewSchema
+  },
+  [IpcChannel.timeTaskStop]: {
+    input: noInputSchema,
+    output: timeStatusViewSchema
   },
 
   [IpcChannel.monitorStatus]: {

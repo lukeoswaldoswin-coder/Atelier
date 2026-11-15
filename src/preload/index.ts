@@ -37,7 +37,8 @@ const api: AtelierApi = {
     reorder: (input) => ipcRenderer.invoke(IpcChannel.tasksReorder, input),
     archive: (input: ByIdInput) => ipcRenderer.invoke(IpcChannel.tasksArchive, input),
     unarchive: (input: ByIdInput) => ipcRenderer.invoke(IpcChannel.tasksUnarchive, input),
-    listAll: () => ipcRenderer.invoke(IpcChannel.tasksListAll)
+    listAll: () => ipcRenderer.invoke(IpcChannel.tasksListAll),
+    workbench: (input) => ipcRenderer.invoke(IpcChannel.tasksWorkbench, input ?? {})
   },
 
   calendar: {
@@ -76,7 +77,11 @@ const api: AtelierApi = {
     assign: (input) => ipcRenderer.invoke(IpcChannel.timeAssign, input),
     remove: (input: ByIdInput) => ipcRenderer.invoke(IpcChannel.timeDelete, input),
     merge: (input) => ipcRenderer.invoke(IpcChannel.timeMerge, input),
-    taskTotals: (input) => ipcRenderer.invoke(IpcChannel.timeTaskTotals, input)
+    taskTotals: (input) => ipcRenderer.invoke(IpcChannel.timeTaskTotals, input),
+    startTask: (input) => ipcRenderer.invoke(IpcChannel.timeStartTask, input),
+    pauseTask: () => ipcRenderer.invoke(IpcChannel.timeTaskPause),
+    resumeTask: () => ipcRenderer.invoke(IpcChannel.timeTaskResume),
+    stopTask: () => ipcRenderer.invoke(IpcChannel.timeTaskStop)
   },
 
   monitor: {
