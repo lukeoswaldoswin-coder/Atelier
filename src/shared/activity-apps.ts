@@ -8,7 +8,13 @@ export interface SupportedApp {
 /** P4 初始支持的绘画软件。新增软件只需在这里追加。 */
 export const SUPPORTED_APPS: readonly SupportedApp[] = [
   { key: 'photoshop', label: 'Adobe Photoshop', executables: ['photoshop.exe'] },
-  { key: 'clipstudio', label: 'Clip Studio Paint', executables: ['clipstudio.exe'] },
+  {
+    key: 'clipstudio',
+    label: 'Clip Studio Paint',
+    // 绘画主程序的真实进程名是 CLIPStudioPaint.exe（大小写无关）；
+    // clipstudio.exe 是 CLIP STUDIO 管理程序的进程名，一并保留。
+    executables: ['clipstudiopaint.exe', 'clipstudio.exe']
+  },
   { key: 'sai', label: 'PaintTool SAI', executables: ['sai.exe', 'sai2.exe'] },
   { key: 'krita', label: 'Krita', executables: ['krita.exe'] },
   { key: 'blender', label: 'Blender', executables: ['blender.exe'] }

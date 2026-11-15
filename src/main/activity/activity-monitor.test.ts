@@ -116,6 +116,15 @@ describe('自动监测协调器', () => {
     expect(monitor.status().activeAppKey).toBe('photoshop')
   })
 
+  it('Clip Studio Paint 的真实进程名也会创建自动记录', () => {
+    probe.sampleValue = { processName: 'ClipStudioPaint.exe', idleMs: 0 }
+    monitor.tick()
+
+    const entry = repo.findActiveAuto()
+    expect(entry?.appKey).toBe('clipstudio')
+    expect(monitor.status().activeAppKey).toBe('clipstudio')
+  })
+
   it('空闲超过阈值会结束自动片段', () => {
     probe.sampleValue = { processName: 'photoshop.exe', idleMs: 0 }
     monitor.tick()

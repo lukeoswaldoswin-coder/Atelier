@@ -14,6 +14,22 @@ export interface ActivityProbe {
 
 const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 const BUFFER_CHARS = 16_384
+const TICK32_MOD = 0x1_0000_0000
+
+/**
+ * 系统空闲毫秒。
+ *
+ * GetLastInputInfo 的 dwTime 是 32 位 GetTickCount（约 49.7 天回绕一次），
+ * 而当前时间取的是 64 位 GetTickCount64；直接相减会在开机超过 49.7 天后
+ * 得到一个巨大的空闲值，导致监测把用户一直判定为空闲、不再累计工时。
+ * 这里统一按 32 位无符号减法计算差值，回绕前后都正确。
+ */
+export function computeIdleMs(tick64Ms: number, lastInputTick32: number): number {
+  if (!Number.isFinite(tick64Ms) || !Number.isFinite(lastInputTick32)) return 0
+  const now32 = ((tick64Ms % TICK32_MOD) + TICK32_MOD) % TICK32_MOD
+  const last32 = ((lastInputTick32 % TICK32_MOD) + TICK32_MOD) % TICK32_MOD
+  return (now32 - last32) >>> 0
+}
 
 /**
  * Windows 原生探测：只读取前台进程名与系统空闲毫秒。
@@ -81,7 +97,6 @@ export function createWin32Probe(): ActivityProbe {
   function readIdleMs(): number {
     const info = { cbSize: koffi.sizeof(LASTINPUTINFO), dwTime: 0 }
     if (!GetLastInputInfo(info)) return 0
-    const tick = Number(GetTickCount64())
-    return Math.max(0, tick - info.dwTime)
+    return computeIdleMs(Number(GetTickCount64()), info.dwTime)
   }
 }
