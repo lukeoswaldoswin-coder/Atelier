@@ -552,6 +552,115 @@ export const assignableTaskSchema = z.object({
 })
 export type AssignableTask = z.infer<typeof assignableTaskSchema>
 
+// ---------------------------------------------------------------------------
+// 每日创作记录（P6.7）
+// ---------------------------------------------------------------------------
+
+/**
+ * 活跃时间片段（P6.7）。
+ *
+ * 一条 time_entries 记录可能包含多个片段（例如中途暂停、切到别的软件）。
+ * 片段只记录「真实发生绘画」的墙钟起止与秒数，用于把工时还原到自然日；
+ * 权威总时长仍然是 time_entries.elapsed_seconds。
+ */
+export const timeSegmentSchema = z.object({
+  id: uuidSchema,
+  entryId: uuidSchema,
+  startedAt: utcIsoSchema,
+  endedAt: utcIsoSchema,
+  seconds: z.number().int().nonnegative(),
+  createdAt: utcIsoSchema,
+  updatedAt: utcIsoSchema
+})
+export type TimeSegment = z.infer<typeof timeSegmentSchema>
+
+/** 某一天的实际创作摘要（月视图日期格子使用）。 */
+export const calendarDayActivitySchema = z.object({
+  date: deadlineDateStringSchema,
+  /** 当天实际累计绘画工时（秒） */
+  seconds: z.number().int().nonnegative(),
+  /** 当天推进的绘画任务数量 */
+  taskCount: z.number().int().nonnegative(),
+  /** 当天涉及的委托数量 */
+  commissionCount: z.number().int().nonnegative(),
+  /** 当天未关联任务的工时（秒） */
+  unassignedSeconds: z.number().int().nonnegative()
+})
+export type CalendarDayActivity = z.infer<typeof calendarDayActivitySchema>
+
+/** 月视图 42 天网格，最多允许 62 天，防止渲染进程请求超范围数据。 */
+export const MAX_ACTIVITY_RANGE_DAYS = 62
+
+export const calendarActivitySummaryInputSchema = z
+  .strictObject({
+    from: deadlineDateStringSchema,
+    to: deadlineDateStringSchema
+  })
+  .refine((value) => value.from <= value.to, {
+    message: '开始日期不能晚于结束日期',
+    path: ['to']
+  })
+  .refine(
+    (value) => {
+      const span = Math.round(
+        (Date.parse(`${value.to}T00:00:00.000Z`) - Date.parse(`${value.from}T00:00:00.000Z`)) /
+          86400000
+      )
+      return span >= 0 && span < MAX_ACTIVITY_RANGE_DAYS
+    },
+    { message: `查询范围不能超过 ${MAX_ACTIVITY_RANGE_DAYS} 天`, path: ['to'] }
+  )
+export type CalendarActivitySummaryInput = z.infer<typeof calendarActivitySummaryInputSchema>
+
+export const calendarActivitySummaryOutputSchema = z.object({
+  /** 只包含有工时记录的日期；没有记录的日期不出现在数组里 */
+  days: z.array(calendarDayActivitySchema)
+})
+export type CalendarActivitySummaryOutput = z.infer<typeof calendarActivitySummaryOutputSchema>
+
+export const calendarDayDetailInputSchema = z.strictObject({
+  date: deadlineDateStringSchema
+})
+export type CalendarDayDetailInput = z.infer<typeof calendarDayDetailInputSchema>
+
+/** 当天某个任务的创作记录（已按任务聚合）。 */
+export const calendarDayTaskActivitySchema = z.object({
+  taskId: uuidSchema,
+  taskTitle: z.string().min(1),
+  taskStatus: taskStatusSchema,
+  taskStage: taskStageSchema,
+  commissionId: uuidSchema,
+  commissionTitle: z.string().min(1),
+  clientName: z.string().min(1),
+  /** 该任务当天投入的秒数（同一天多片段已合计） */
+  seconds: z.number().int().nonnegative(),
+  /** 当天属于该任务的工时记录 id，用于跳转到工时记录 */
+  entryIds: z.array(uuidSchema)
+})
+export type CalendarDayTaskActivity = z.infer<typeof calendarDayTaskActivitySchema>
+
+/** 当天涉及的委托汇总。 */
+export const calendarDayCommissionActivitySchema = z.object({
+  id: uuidSchema,
+  title: z.string().min(1),
+  clientName: z.string().min(1),
+  seconds: z.number().int().nonnegative()
+})
+export type CalendarDayCommissionActivity = z.infer<typeof calendarDayCommissionActivitySchema>
+
+export const calendarDayDetailOutputSchema = z.object({
+  date: deadlineDateStringSchema,
+  /** 当天实际累计工时（含未关联任务部分） */
+  totalSeconds: z.number().int().nonnegative(),
+  /** 当天未关联任务的工时 */
+  unassignedSeconds: z.number().int().nonnegative(),
+  tasks: z.array(calendarDayTaskActivitySchema),
+  /** 当天未关联任务的工时记录 id，用于跳转到工时记录 */
+  unassignedEntryIds: z.array(uuidSchema),
+  commissions: z.array(calendarDayCommissionActivitySchema)
+})
+export type CalendarDayDetailOutput = z.infer<typeof calendarDayDetailOutputSchema>
+
 export const monitorStatusOutputSchema = z.object({
   platformSupported: z.boolean(),
   enabled: z.boolean(),
