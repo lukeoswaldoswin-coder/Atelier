@@ -581,6 +581,80 @@ describe('createIpcHandlers', () => {
     db.close()
   })
 
+  it('tasks:workbench 跨委托聚合任务，并拒绝未知入参', async () => {
+    const { handlers, db } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+    const commission = (await handlers[IpcChannel.commissionsCreate]({
+      clientId: client.id,
+      title: '委托',
+      type: '插画'
+    })) as Commission
+    await handlers[IpcChannel.commissionsUpdate]({ id: commission.id, status: 'active' })
+    const task = (await handlers[IpcChannel.tasksCreate]({
+      commissionId: commission.id,
+      title: '任务',
+      stage: 'draft'
+    })) as Task
+
+    const result = (await handlers[IpcChannel.tasksWorkbench](undefined)) as {
+      pending: Array<{ task: { id: string }; clientName: string }>
+      done: unknown[]
+    }
+    expect(result.pending.map((item) => item.task.id)).toEqual([task.id])
+    expect(result.pending[0]?.clientName).toBe('客户')
+
+    await expect(
+      handlers[IpcChannel.tasksWorkbench]({ includeDone: true, injected: 1 })
+    ).rejects.toThrow()
+    db.close()
+  })
+
+  it('time 任务计时通道：开始、暂停、继续、结束', async () => {
+    const { handlers, db } = setup()
+    const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
+    const commission = (await handlers[IpcChannel.commissionsCreate]({
+      clientId: client.id,
+      title: '委托',
+      type: '插画'
+    })) as Commission
+    await handlers[IpcChannel.commissionsUpdate]({ id: commission.id, status: 'active' })
+    const task = (await handlers[IpcChannel.tasksCreate]({
+      commissionId: commission.id,
+      title: '任务',
+      stage: 'draft'
+    })) as Task
+
+    const started = (await handlers[IpcChannel.timeStartTask]({
+      taskId: task.id
+    })) as {
+      taskSession: { taskId: string; accumulatedSeconds: number } | null
+    }
+    expect(started.taskSession?.taskId).toBe(task.id)
+    // 还没有活跃采样，累计必须为 0（不能按墙钟算）
+    expect(started.taskSession?.accumulatedSeconds).toBe(0)
+
+    const paused = (await handlers[IpcChannel.timeTaskPause](undefined)) as {
+      taskSession: { state: string } | null
+    }
+    expect(paused.taskSession?.state).toBe('paused')
+
+    const resumed = (await handlers[IpcChannel.timeTaskResume](undefined)) as {
+      taskSession: { state: string } | null
+    }
+    expect(resumed.taskSession?.state).toBe('running')
+
+    const stopped = (await handlers[IpcChannel.timeTaskStop](undefined)) as {
+      taskSession: unknown | null
+    }
+    expect(stopped.taskSession).toBeNull()
+
+    // 再次开始会被未知字段拒绝
+    await expect(
+      handlers[IpcChannel.timeStartTask]({ taskId: task.id, unexpected: true })
+    ).rejects.toThrow()
+    db.close()
+  })
+
   it('输出不符合契约时不会把脏数据交给渲染进程', async () => {
     const dirtyClients = {
       create: () => ({ id: 'not-a-uuid' }),

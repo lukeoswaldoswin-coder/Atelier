@@ -14,7 +14,10 @@ import {
   type ReorderTasksInput,
   type Task,
   type TaskStatus,
-  type UpdateTaskInput
+  type UpdateTaskInput,
+  type WorkbenchInput,
+  type WorkbenchOutput,
+  type WorkbenchTask
 } from '@shared/domain'
 import { DataError } from '@shared/errors'
 import { calendarDateOfDeadline } from '@shared/calendar-date'
@@ -77,6 +80,11 @@ export interface TasksRepository {
   unarchive(input: ByIdInput): Task | null
   /** 全部任务（含归档），用于工时归属选择 */
   listAll(): AssignableTask[]
+  /**
+   * 绘画任务工作台：跨所有委托聚合任务。
+   * 默认排除归档任务、已完成任务，以及归档/已取消委托下的任务。
+   */
+  workbench(input: WorkbenchInput): WorkbenchOutput
   /**
    * 采纳排期建议：只写 planned_date。
    * 事务内校验资格与建议快照；任一项不通过则整批回滚。
@@ -526,6 +534,76 @@ export function createTasksRepository(db: AppDatabase): TasksRepository {
 
         return applied
       })()
+    },
+
+    /**
+     * 工作台聚合查询。
+     *
+     * 复用现有 tasks / commissions / clients 与既有状态规则：
+     * - 默认不显示已归档任务；
+     * - 已归档、已取消的委托不进入待处理列表；
+     * - 已完成任务单独一组返回，由界面折叠展示，不占用主区域；
+     * - 不引入第二套任务状态。
+     */
+    workbench(input: WorkbenchInput): WorkbenchOutput {
+      const where = ['t.archived_at IS NULL', "c.status <> 'cancelled'", 'c.archived_at IS NULL']
+      if (input.includeArchived) {
+        // 显式要求时放开归档过滤（保留查看能力）
+        where.length = 0
+        where.push("c.status <> 'cancelled'")
+      }
+      if (!input.includeDone) where.push("t.status <> 'done'")
+
+      const sql = `SELECT ${TASK_COLUMNS}, ${COMMISSION_COLUMNS},
+                          c.archived_at AS commissionArchivedAt,
+                          COALESCE((
+                            SELECT SUM(e.elapsed_seconds) FROM time_entries e
+                             WHERE e.task_id = t.id AND e.deleted_at IS NULL
+                               AND e.merged_into_id IS NULL AND e.status = 'completed'
+                          ), 0) AS actualSeconds
+                     ${CALENDAR_JOINS}
+                    WHERE ${where.join(' AND ')}
+                    ORDER BY
+                      CASE c.deadline_kind
+                        WHEN 'date' THEN c.deadline_date
+                        WHEN 'datetime' THEN substr(c.deadline_at, 1, 10)
+                        ELSE NULL END IS NULL,
+                      CASE c.deadline_kind
+                        WHEN 'date' THEN c.deadline_date
+                        WHEN 'datetime' THEN substr(c.deadline_at, 1, 10)
+                        ELSE NULL END,
+                      ${STAGE_CASE}, t.sort_order, t.created_at, t.id`
+
+      const rows = db.prepare(sql).all() as Array<Record<string, unknown>>
+
+      const pending: WorkbenchTask[] = []
+      const done: WorkbenchTask[] = []
+
+      for (const row of rows) {
+        const task = rowToTask(row)
+        const item: WorkbenchTask = {
+          task,
+          commission: {
+            id: toText(row['commissionId']),
+            title: toText(row['commissionTitle']),
+            status: toText(row['commissionStatus']) as CommissionStatus,
+            archivedAt:
+              row['commissionArchivedAt'] === null || row['commissionArchivedAt'] === undefined
+                ? null
+                : toText(row['commissionArchivedAt'])
+          },
+          clientName:
+            row['clientName'] === null || row['clientName'] === undefined
+              ? '未知客户'
+              : toText(row['clientName']),
+          actualSeconds: toNumber(row['actualSeconds'])
+        }
+
+        if (task.status === 'done') done.push(item)
+        else pending.push(item)
+      }
+
+      return { pending, done }
     },
 
     calendar(input: CalendarTasksInput): CalendarTasksOutput {
