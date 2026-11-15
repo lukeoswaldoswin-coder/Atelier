@@ -35,7 +35,10 @@ export interface TimeEntriesRepository {
   get(id: string): TimeEntry | null
   getView(id: string): TimeEntryView | null
   findActiveManual(): TimeEntry | null
+  /** 自动监测产生的片段（task_id 为空） */
   findActiveAuto(): TimeEntry | null
+  /** 任务计时会话（source='auto' 且 task_id 非空） */
+  findActiveTaskSession(): TimeEntry | null
   insert(input: NewTimeEntry): TimeEntry
   checkpoint(id: string, elapsedSeconds: number, lastHeartbeatAt: string, updatedAt: string): void
   setStatus(
@@ -181,6 +184,35 @@ export function createTimeEntriesRepository(db: AppDatabase): TimeEntriesReposit
     return row ? rowToEntry(row) : null
   }
 
+  /**
+   * 进行中的自动片段：只取 task_id 为空的行。
+   * 任务计时会话同样是 source='auto'，必须排除，否则会把它当成普通自动片段结算。
+   */
+  function findActiveAutoSegment(): TimeEntry | null {
+    const row = db
+      .prepare(
+        `SELECT ${COLUMNS} FROM time_entries e
+          WHERE e.source = 'auto' AND e.task_id IS NULL AND e.deleted_at IS NULL
+            AND e.status = 'running'
+          ORDER BY e.started_at DESC LIMIT 1`
+      )
+      .get() as Record<string, unknown> | undefined
+    return row ? rowToEntry(row) : null
+  }
+
+  /** 进行中的任务计时会话（source='auto' 且 task_id 非空）。 */
+  function findActiveTaskSessionRow(): TimeEntry | null {
+    const row = db
+      .prepare(
+        `SELECT ${COLUMNS} FROM time_entries e
+          WHERE e.source = 'auto' AND e.task_id IS NOT NULL AND e.deleted_at IS NULL
+            AND e.status = 'running'
+          ORDER BY e.started_at DESC LIMIT 1`
+      )
+      .get() as Record<string, unknown> | undefined
+    return row ? rowToEntry(row) : null
+  }
+
   function queryViews(input: TimeListInput): TimeEntryView[] {
     const where = [
       "e.deleted_at IS NULL",
@@ -214,7 +246,8 @@ export function createTimeEntriesRepository(db: AppDatabase): TimeEntriesReposit
       return row ? rowToView(row) : null
     },
     findActiveManual: () => findActive('manual'),
-    findActiveAuto: () => findActive('auto'),
+    findActiveAuto: findActiveAutoSegment,
+    findActiveTaskSession: findActiveTaskSessionRow,
 
     insert(input: NewTimeEntry): TimeEntry {
       const now = input.lastHeartbeatAt ?? input.startedAt

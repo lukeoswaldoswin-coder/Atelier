@@ -127,6 +127,15 @@ export function createActivityMonitor(deps: MonitorDeps) {
     auto.lastCheckpointMono = nowMono
   }
 
+  /** 判定当前采样是否算「绘画软件活跃」（与 P4 原有规则完全一致）。 */
+  function isActiveSample(sample: ActivitySample): { active: boolean; appKey: string | null } {
+    const appKey = resolveAppKey(sample.processName)
+    const supported = appKey !== null && config.apps.includes(appKey)
+    const idleLimit = config.idleMinutes * 60 * 1000
+    const idleOk = !config.idleEnabled || sample.idleMs < idleLimit
+    return { active: supported && idleOk, appKey }
+  }
+
   function evaluate(sample: ActivitySample): void {
     const nowMono = monotonic()
 
@@ -135,11 +144,23 @@ export function createActivityMonitor(deps: MonitorDeps) {
       closeAuto('检测中断，已按检查点结算')
     }
 
-    const appKey = resolveAppKey(sample.processName)
-    const supported = appKey !== null && config.apps.includes(appKey)
-    const idleLimit = config.idleMinutes * 60 * 1000
-    const idleOk = !config.idleEnabled || sample.idleMs < idleLimit
-    const active = config.enabled && supported && idleOk
+    const { active, appKey } = isActiveSample(sample)
+
+    // ---- 任务计时会话优先：活跃时间归属当前任务，不产生独立自动记录 ----
+    // 注意：这里刻意不看 config.enabled —— 用户主动开启任务计时时，
+    // 即使「自动监测」总开关是关的，也必须能累计（P6.6 明确要求）。
+    if (deps.timeService.hasTaskSession()) {
+      closeAuto()
+      deps.timeService.applyTaskActivity(active, active ? appKey : null)
+      lastSample = sample
+      return
+    }
+
+    if (!config.enabled) {
+      closeAuto()
+      lastSample = sample
+      return
+    }
 
     if (!active) {
       closeAuto()
@@ -169,7 +190,8 @@ export function createActivityMonitor(deps: MonitorDeps) {
   }
 
   function tick(): void {
-    if (!config.enabled) {
+    // 没有任务会话且监测关闭时完全不采样，保持 P4 行为（不加载原生探测）。
+    if (!config.enabled && !deps.timeService.hasTaskSession()) {
       closeAuto()
       return
     }
@@ -187,7 +209,9 @@ export function createActivityMonitor(deps: MonitorDeps) {
   function restartTimer(): void {
     if (timer) clearInterval(timer)
     timer = null
-    if (!config.enabled || !isSupportedPlatform()) return
+    if (!isSupportedPlatform()) return
+    // 任务会话期间即使监测关闭也必须继续采样，否则无法累计。
+    if (!config.enabled && !deps.timeService.hasTaskSession()) return
     timer = setInterval(tick, 1000)
     timer.unref?.()
   }
@@ -242,6 +266,8 @@ export function createActivityMonitor(deps: MonitorDeps) {
     closeAuto()
     if (timer) clearInterval(timer)
     timer = null
+    // 退出前把任务会话的累计值落库，避免丢最后一个检查点区间
+    if (deps.timeService.hasTaskSession()) deps.timeService.persistTaskSessionProgress()
   }
 
   /**
@@ -251,6 +277,12 @@ export function createActivityMonitor(deps: MonitorDeps) {
   function settleForRestore(): { entryId: string; seconds: number } | null {
     if (timer) clearInterval(timer)
     timer = null
+
+    // 任务会话同样是 running 的 auto 记录，恢复数据库前必须先结算，
+    // 否则「没有 running 记录」的断言会失败。
+    if (deps.timeService.hasTaskSession()) {
+      deps.timeService.stopTaskSession()
+    }
 
     const entryId = auto?.entryId ?? null
     if (!entryId) {
@@ -275,11 +307,20 @@ export function createActivityMonitor(deps: MonitorDeps) {
 
   function handleSuspend(): void {
     closeAuto('系统休眠，已结算')
+    // 任务会话不因休眠结束，只停止累计（休眠时间不计入实际工时）
+    if (deps.timeService.hasTaskSession()) deps.timeService.applyTaskActivity(false, null)
   }
 
   function handleResume(): void {
     lastSample = null
+    restartTimer()
     tick()
+  }
+
+  /** 任务会话开始/结束时调用：保证监测定时器按需启停。 */
+  function refreshTimer(): void {
+    restartTimer()
+    if (timer) tick()
   }
 
   return {
@@ -294,6 +335,7 @@ export function createActivityMonitor(deps: MonitorDeps) {
     setIdleEnabled,
     handleSuspend,
     handleResume,
+    refreshTimer,
     getConfig: (): MonitorConfig => config
   }
 }

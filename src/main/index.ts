@@ -327,7 +327,8 @@ if (!hasSingleInstanceLock) {
         tasks: database.tasks,
         time: timeService as TimeService,
         monitor: activityMonitor as ActivityMonitor,
-        data: dataController
+        data: dataController,
+        onTaskSessionChanged: () => activityMonitor?.refreshTimer()
       }),
       { isAllowedSender: createSenderGuard(getRendererAllowedEntries()) }
     )

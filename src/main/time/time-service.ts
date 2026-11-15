@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import type {
+  TaskSessionStatus,
   TimeEntryView,
   TimeListInput,
   TimeMergeInput,
-  TimeStatusOutput,
+  TimeStatusView,
   TimeSummaryInput,
   TimeSummaryOutput,
   TimeTaskTotalsOutput,
@@ -33,12 +34,57 @@ interface ManualState {
   lastCheckpointMono: number
 }
 
+/**
+ * 任务计时会话（P6.6）。
+ *
+ * 与手动计时的关键区别：累计时间**只**来自绘画软件活跃片段，不按墙钟累加。
+ * 会话记录本身是一条 time_entries（source='auto'、task_id 非空），
+ * 数据库的唯一索引保证同一时刻只能存在一条 running 的 auto 记录，
+ * 因此任务会话与普通自动片段天然互斥，不可能重复累计。
+ */
+interface TaskSessionState {
+  entryId: string
+  taskId: string
+  /** 已结算的活跃秒数 */
+  accumulatedSeconds: number
+  /** 当前活跃片段开始时的单调时钟；null = 当前没有在累计 */
+  segmentStartedMono: number | null
+  /** 用户手动暂停：不再累计，但会话保持 */
+  manualPaused: boolean
+  /** 最近一次活跃判定的应用 key */
+  activeAppKey: string | null
+  /** 会话开始的墙钟时间，用于计算会话持续时间 */
+  startedAtWall: number
+  lastCheckpointMono: number
+}
+
 export interface TimeService {
-  status(): TimeStatusOutput
-  start(taskId: string): TimeStatusOutput
-  pause(): TimeStatusOutput
-  resume(): TimeStatusOutput
-  stop(): TimeStatusOutput
+  status(): TimeStatusView
+  start(taskId: string): TimeStatusView
+  pause(): TimeStatusView
+  resume(): TimeStatusView
+  stop(): TimeStatusView
+
+  // ---- 任务计时会话（P6.6）----
+  /** 开始任务计时会话；已有其它任务会话时按 replaceCurrent 决定是否先结算。 */
+  startTaskSession(taskId: string, replaceCurrent: boolean): TimeStatusView
+  /** 手动暂停：停止累计，会话保持 */
+  pauseTaskSession(): TimeStatusView
+  /** 手动继续：恢复自动监测驱动的累计 */
+  resumeTaskSession(): TimeStatusView
+  /** 结束会话并结算累计工时 */
+  stopTaskSession(): TimeStatusView
+  /** 当前任务会话的任务 id；没有会话时为 null */
+  getTaskSessionTaskId(): string | null
+  /** 是否存在任务计时会话（含手动暂停） */
+  hasTaskSession(): boolean
+  /**
+   * 由活动监测每秒调用：根据当前是否活跃推进累计。
+   * active=false 只暂停累计，绝不结束会话。
+   */
+  applyTaskActivity(active: boolean, appKey: string | null): void
+  /** 把当前累计值立即落库（退出前调用，避免丢最后一个检查点区间） */
+  persistTaskSessionProgress(): void
   /** 由主进程定时器每秒调用：检查 24 小时上限并写检查点 */
   tick(): void
   getManualTaskId(): string | null
@@ -69,6 +115,7 @@ export function createTimeService(
 
   let manual: ManualState | null = null
   let notice: string | null = null
+  let taskSession: TaskSessionState | null = null
 
   // ---- 启动恢复：不按墙钟补算停机时间 ----
   const recoveredManual = repo.findActiveManual()
@@ -92,6 +139,31 @@ export function createTimeService(
       status: 'paused',
       lastCheckpointMono: clock.monotonicMs()
     }
+  }
+
+  // 任务计时会话（source='auto' 且 task_id 非空）要恢复为进行中，不能像普通自动片段那样结算：
+  // 用户点击开始后会话一直存在直到手动结束，重启不应丢掉它。
+  const recoveredTaskSession = repo.findActiveTaskSession()
+  if (recoveredTaskSession) {
+    const recoveredAt = iso(clock.wallMs())
+    taskSession = {
+      entryId: recoveredTaskSession.id,
+      taskId: recoveredTaskSession.taskId as string,
+      accumulatedSeconds: recoveredTaskSession.elapsedSeconds,
+      // 重启后不能把停机时间算进去，从「未累计」状态等下一次活跃判定
+      segmentStartedMono: null,
+      manualPaused: false,
+      activeAppKey: null,
+      startedAtWall: Date.parse(recoveredTaskSession.startedAt),
+      lastCheckpointMono: clock.monotonicMs()
+    }
+    repo.checkpoint(
+      recoveredTaskSession.id,
+      recoveredTaskSession.elapsedSeconds,
+      recoveredTaskSession.lastHeartbeatAt ?? recoveredAt,
+      recoveredAt
+    )
+    notice = '上次任务计时未正常结束，已恢复；累计工时按重启前的检查点继续。'
   }
 
   const recoveredAuto = repo.findActiveAuto()
@@ -123,14 +195,92 @@ export function createTimeService(
     )
   }
 
-  function status(): TimeStatusOutput {
+  function currentSessionAccumulated(): number {
+    if (!taskSession) return 0
+    if (taskSession.segmentStartedMono === null) return taskSession.accumulatedSeconds
+    return (
+      taskSession.accumulatedSeconds +
+      Math.max(0, Math.floor((clock.monotonicMs() - taskSession.segmentStartedMono) / 1000))
+    )
+  }
+
+  function taskSessionView(): TaskSessionStatus | null {
+    if (!taskSession) return null
+    const entry = repo.getView(taskSession.entryId)
+    if (!entry) return null
+
+    const accumulating = taskSession.segmentStartedMono !== null
+    return {
+      entry,
+      taskId: taskSession.taskId,
+      state: taskSession.manualPaused ? 'paused' : 'running',
+      accumulating,
+      activeAppKey: taskSession.activeAppKey,
+      accumulatedSeconds: currentSessionAccumulated(),
+      sessionSeconds: Math.max(
+        0,
+        Math.floor((clock.wallMs() - taskSession.startedAtWall) / 1000)
+      ),
+      startedAt: entry.entry.startedAt
+    }
+  }
+
+  function status(): TimeStatusView {
     const manualView = manual ? repo.getView(manual.entryId) : null
     const autoEntry = repo.findActiveAuto()
     return {
       manual: manualView,
       auto: autoEntry ? repo.getView(autoEntry.id) : null,
-      notice
+      notice,
+      taskSession: taskSessionView()
     }
+  }
+
+  /** 把当前活跃片段结算进累计值（不写库），并清空片段起点。 */
+  function closeActiveSegment(): void {
+    if (!taskSession || taskSession.segmentStartedMono === null) return
+    taskSession = {
+      ...taskSession,
+      accumulatedSeconds: currentSessionAccumulated(),
+      segmentStartedMono: null
+    }
+  }
+
+  /**
+   * 把当前累计值立即落库。
+   *
+   * 用于「重启前最后时刻」：若不落库，异常退出会丢掉最后一个检查点区间
+   * （最多 30 秒），重启恢复出来的数字就会少于用户实际看到的。
+   */
+  function persistTaskSessionProgress(): void {
+    if (!taskSession) return
+    const nowWall = iso(clock.wallMs())
+    repo.checkpoint(
+      taskSession.entryId,
+      currentSessionAccumulated(),
+      nowWall,
+      nowWall
+    )
+  }
+
+  /** 结束会话并写库。seconds 由调用方决定（结束前必须已 closeActiveSegment）。 */
+  function finalizeTaskSession(note: string | null): void {
+    if (!taskSession) return
+    const elapsed = taskSession.accumulatedSeconds
+    const endedAt = iso(clock.wallMs())
+    const startedAt = repo.get(taskSession.entryId)?.startedAt
+    if (!startedAt) throw new Error('任务计时记录丢失')
+
+    repo.finalize({
+      id: taskSession.entryId,
+      endedAt,
+      elapsedSeconds: elapsed,
+      lastHeartbeatAt: endedAt,
+      clockSkewSeconds: computeClockSkewSeconds(startedAt, endedAt, elapsed),
+      note,
+      updatedAt: endedAt
+    })
+    taskSession = null
   }
 
   function assertStartable(taskId: string): void {
@@ -167,10 +317,16 @@ export function createTimeService(
     })
   }
 
-  function start(taskId: string): TimeStatusOutput {
+  function start(taskId: string): TimeStatusView {
     if (manual) throw new DataError('TIMER_ALREADY_RUNNING', '已有正在进行的计时，请先结束')
     if (repo.findActiveManual()) {
       throw new DataError('TIMER_ALREADY_RUNNING', '已有正在进行的计时，请先结束')
+    }
+    if (taskSession) {
+      throw new DataError(
+        'TASK_SESSION_ALREADY_RUNNING',
+        '已有绘画任务正在计时，请先结束该任务计时'
+      )
     }
     assertStartable(taskId)
 
@@ -206,7 +362,7 @@ export function createTimeService(
     return status()
   }
 
-  function pause(): TimeStatusOutput {
+  function pause(): TimeStatusView {
     if (!manual || manual.status !== 'running') {
       throw new DataError('TIMER_NOT_RUNNING', '当前没有正在运行的计时')
     }
@@ -226,7 +382,7 @@ export function createTimeService(
     return status()
   }
 
-  function resume(): TimeStatusOutput {
+  function resume(): TimeStatusView {
     if (!manual || manual.status !== 'paused') {
       throw new DataError('TIMER_NOT_PAUSED', '当前没有已暂停的计时')
     }
@@ -244,7 +400,7 @@ export function createTimeService(
     return status()
   }
 
-  function stop(): TimeStatusOutput {
+  function stop(): TimeStatusView {
     if (!manual) throw new DataError('TIMER_NOT_RUNNING', '当前没有计时')
     const elapsed = currentElapsedSeconds()
     const endedAt = iso(clock.wallMs())
@@ -263,6 +419,156 @@ export function createTimeService(
     manual = null
     notice = null
     return status()
+  }
+
+  // -------------------------------------------------------------------------
+  // 任务计时会话
+  // -------------------------------------------------------------------------
+
+  function startTaskSession(taskId: string, replaceCurrent: boolean): TimeStatusView {
+    if (manual) {
+      throw new DataError(
+        'TIMER_ALREADY_RUNNING',
+        '已有手动计时正在进行，请先结束它再开始任务计时'
+      )
+    }
+
+    // 已在本任务上计时：幂等返回，不新建会话
+    if (taskSession && taskSession.taskId === taskId) {
+      if (taskSession.manualPaused) return resumeTaskSession()
+      return status()
+    }
+
+    if (taskSession && !replaceCurrent) {
+      const current = repo.getView(taskSession.entryId)
+      throw new DataError(
+        'TASK_SESSION_ALREADY_RUNNING',
+        `「${current?.task?.title ?? '当前任务'}」仍在计时，请先结束它`
+      )
+    }
+
+    assertStartable(taskId)
+
+    const nowWall = iso(clock.wallMs())
+    const nowMono = clock.monotonicMs()
+
+    repo.transaction(() => {
+      // 先结算旧会话，保证不会同时存在两个会话（数据库唯一索引也会拒绝）
+      if (taskSession) {
+        closeActiveSegment()
+        finalizeTaskSession('切换到新任务，已自动结算')
+      }
+      // 普通自动片段也必须先结算，否则唯一索引冲突
+      closeActiveAuto()
+
+      repo.insert({
+        id: randomUUID(),
+        taskId,
+        source: 'auto',
+        status: 'running',
+        startedAt: nowWall,
+        elapsedSeconds: 0,
+        lastHeartbeatAt: nowWall,
+        appKey: null,
+        note: null
+      })
+    })
+
+    const created = repo.findActiveTaskSession()
+    if (!created) throw new Error('任务计时启动后无法读回记录')
+
+    taskSession = {
+      entryId: created.id,
+      taskId,
+      accumulatedSeconds: 0,
+      // 先不累计，等监测确认绘画软件活跃后才开始计时
+      segmentStartedMono: null,
+      manualPaused: false,
+      activeAppKey: null,
+      startedAtWall: clock.wallMs(),
+      lastCheckpointMono: nowMono
+    }
+    notice = null
+    return status()
+  }
+
+  function pauseTaskSession(): TimeStatusView {
+    if (!taskSession) throw new DataError('TASK_SESSION_NOT_RUNNING', '当前没有任务计时')
+    if (taskSession.manualPaused) return status()
+
+    closeActiveSegment()
+    taskSession = { ...taskSession, manualPaused: true, activeAppKey: null }
+    const nowWall = iso(clock.wallMs())
+    repo.checkpoint(
+      taskSession.entryId,
+      taskSession.accumulatedSeconds,
+      nowWall,
+      nowWall
+    )
+    return status()
+  }
+
+  function resumeTaskSession(): TimeStatusView {
+    if (!taskSession) throw new DataError('TASK_SESSION_NOT_RUNNING', '当前没有任务计时')
+    if (!taskSession.manualPaused) return status()
+
+    taskSession = {
+      ...taskSession,
+      manualPaused: false,
+      segmentStartedMono: null,
+      lastCheckpointMono: clock.monotonicMs()
+    }
+    return status()
+  }
+
+  function stopTaskSession(): TimeStatusView {
+    if (!taskSession) throw new DataError('TASK_SESSION_NOT_RUNNING', '当前没有任务计时')
+    closeActiveSegment()
+    finalizeTaskSession(null)
+    notice = null
+    return status()
+  }
+
+  /**
+   * 每秒由活动监测调用。
+   *
+   * active 只影响「是否累计」，永远不会结束会话——用户切到浏览器、休息、
+   * 电脑空闲都只是停止累计，会话保持进行中，直到用户手动结束。
+   */
+  function applyTaskActivity(active: boolean, appKey: string | null): void {
+    if (!taskSession) return
+    if (taskSession.manualPaused) return
+
+    if (!active) {
+      closeActiveSegment()
+      if (taskSession.activeAppKey !== null) {
+        taskSession = { ...taskSession, activeAppKey: null }
+      }
+      return
+    }
+
+    if (taskSession.segmentStartedMono === null) {
+      taskSession = {
+        ...taskSession,
+        segmentStartedMono: clock.monotonicMs(),
+        activeAppKey: appKey,
+        lastCheckpointMono: clock.monotonicMs()
+      }
+      return
+    }
+
+    if (taskSession.activeAppKey !== appKey) {
+      taskSession = { ...taskSession, activeAppKey: appKey }
+    }
+
+    // 每 30 秒落一次检查点，异常退出后最多丢一个检查点区间
+    const nowMono = clock.monotonicMs()
+    if (nowMono - taskSession.lastCheckpointMono >= checkpointInterval) {
+      const nowWall = iso(clock.wallMs())
+      const elapsed = currentSessionAccumulated()
+      repo.checkpoint(taskSession.entryId, elapsed, nowWall, nowWall)
+      taskSession = { ...taskSession, lastCheckpointMono: nowMono }
+    }
   }
 
   function tick(): void {
@@ -451,8 +757,16 @@ export function createTimeService(
     pause,
     resume,
     stop,
+    startTaskSession,
+    pauseTaskSession,
+    resumeTaskSession,
+    stopTaskSession,
+    applyTaskActivity,
+    persistTaskSessionProgress,
     tick,
     getManualTaskId: () => manual?.taskId ?? null,
+    getTaskSessionTaskId: () => taskSession?.taskId ?? null,
+    hasTaskSession: () => taskSession !== null,
     isManualRunning: () => manual?.status === 'running',
     list,
     summary,

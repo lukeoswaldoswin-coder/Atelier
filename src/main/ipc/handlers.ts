@@ -19,6 +19,11 @@ export interface IpcHandlerDeps {
   time: TimeService
   monitor: ActivityMonitor
   data: DataController
+  /**
+   * 任务计时会话开始/结束后调用，让活动监测按需启停采样定时器。
+   * 缺省时不做任何事（测试可省略）。
+   */
+  onTaskSessionChanged?: () => void
 }
 
 /**
@@ -132,6 +137,11 @@ export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
       return ipcContracts[IpcChannel.tasksListAll].output.parse(tasks.listAll())
     },
 
+    [IpcChannel.tasksWorkbench]: async (payload) => {
+      const input = ipcContracts[IpcChannel.tasksWorkbench].input.parse(payload ?? {})
+      return ipcContracts[IpcChannel.tasksWorkbench].output.parse(tasks.workbench(input))
+    },
+
     [IpcChannel.calendarTasks]: async (payload) => {
       const input = ipcContracts[IpcChannel.calendarTasks].input.parse(payload)
       return ipcContracts[IpcChannel.calendarTasks].output.parse(tasks.calendar(input))
@@ -237,6 +247,32 @@ export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
     [IpcChannel.timeTaskTotals]: async (payload) => {
       const input = ipcContracts[IpcChannel.timeTaskTotals].input.parse(payload)
       return ipcContracts[IpcChannel.timeTaskTotals].output.parse(time.taskTotals(input.taskIds))
+    },
+
+    [IpcChannel.timeStartTask]: async (payload) => {
+      const input = ipcContracts[IpcChannel.timeStartTask].input.parse(payload)
+      const result = time.startTaskSession(input.taskId, input.replaceCurrent)
+      deps.onTaskSessionChanged?.()
+      return ipcContracts[IpcChannel.timeStartTask].output.parse(result)
+    },
+
+    [IpcChannel.timeTaskPause]: async (payload) => {
+      ipcContracts[IpcChannel.timeTaskPause].input.parse(payload)
+      return ipcContracts[IpcChannel.timeTaskPause].output.parse(time.pauseTaskSession())
+    },
+
+    [IpcChannel.timeTaskResume]: async (payload) => {
+      ipcContracts[IpcChannel.timeTaskResume].input.parse(payload)
+      const result = time.resumeTaskSession()
+      deps.onTaskSessionChanged?.()
+      return ipcContracts[IpcChannel.timeTaskResume].output.parse(result)
+    },
+
+    [IpcChannel.timeTaskStop]: async (payload) => {
+      ipcContracts[IpcChannel.timeTaskStop].input.parse(payload)
+      const result = time.stopTaskSession()
+      deps.onTaskSessionChanged?.()
+      return ipcContracts[IpcChannel.timeTaskStop].output.parse(result)
     },
 
     [IpcChannel.monitorStatus]: async (payload) => {
