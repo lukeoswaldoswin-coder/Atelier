@@ -19,8 +19,10 @@ const state = vi.hoisted(() => {
   const handlers = new Map<string, (event: unknown, payload: unknown) => Promise<unknown>>()
   const windows: unknown[] = []
   const listeners = new Map<string, () => void>()
+  const windowListeners = new Map<string, (event: unknown) => void>()
+  const trays: unknown[] = []
   const ready: { resolve?: () => void } = {}
-  return { handlers, windows, listeners, ready, tempDir: '' }
+  return { handlers, windows, listeners, windowListeners, trays, ready, tempDir: '' }
 })
 
 vi.mock('electron', () => {
@@ -41,6 +43,7 @@ vi.mock('electron', () => {
     exit: vi.fn(),
     getName: () => 'atelier',
     getVersion: () => '0.1.0',
+    getAppPath: () => state.tempDir,
     isPackaged: false,
     getPath: () => state.tempDir,
     setPath: vi.fn()
@@ -62,7 +65,12 @@ vi.mock('electron', () => {
     loadURL = vi.fn(async () => {})
     setMenuBarVisibility = vi.fn()
     once = vi.fn()
+    on = vi.fn((event: string, listener: (event: unknown) => void) => {
+      state.windowListeners.set(event, listener)
+    })
     show = vi.fn()
+    hide = vi.fn()
+    isDestroyed = vi.fn(() => false)
     isMinimized = vi.fn(() => false)
     restore = vi.fn()
     focus = vi.fn()
@@ -70,6 +78,18 @@ vi.mock('electron', () => {
     constructor(options: Record<string, unknown>) {
       this.options = options
       state.windows.push(this)
+    }
+  }
+
+  class FakeTray {
+    setToolTip = vi.fn()
+    setContextMenu = vi.fn()
+    on = vi.fn()
+    displayBalloon = vi.fn()
+    destroy = vi.fn()
+
+    constructor() {
+      state.trays.push(this)
     }
   }
 
@@ -81,6 +101,14 @@ vi.mock('electron', () => {
   return {
     app,
     BrowserWindow: FakeBrowserWindow,
+    Tray: FakeTray,
+    Menu: { buildFromTemplate: vi.fn(() => ({})) },
+    nativeImage: {
+      createFromPath: vi.fn(() => ({
+        isEmpty: () => false,
+        resize: () => ({ isEmpty: () => false })
+      }))
+    },
     ipcMain: {
       handle: vi.fn((channel: string, handler: (event: unknown, payload: unknown) => Promise<unknown>) => {
         state.handlers.set(channel, handler)
@@ -105,6 +133,7 @@ interface WindowLike {
   }
   loadFile: ReturnType<typeof vi.fn>
   loadURL: ReturnType<typeof vi.fn>
+  hide: ReturnType<typeof vi.fn>
   webContents: {
     setWindowOpenHandler: ReturnType<typeof vi.fn>
   }
@@ -213,10 +242,30 @@ describe('主进程启动流程', () => {
     expect(win.webContents.setWindowOpenHandler).toHaveBeenCalledTimes(1)
     expect(win.webContents.setWindowOpenHandler.mock.calls[0]?.[0]?.()).toEqual({ action: 'deny' })
 
+    // 托盘常驻：关闭窗口只隐藏窗口，主进程继续计时
+    expect(state.trays).toHaveLength(1)
+    const closeHandler = state.windowListeners.get('close')
+    expect(typeof closeHandler).toBe('function')
+
+    const preventDefault = vi.fn()
+    closeHandler?.({ preventDefault })
+    expect(preventDefault).toHaveBeenCalledTimes(1)
+    expect(win.hide).toHaveBeenCalledTimes(1)
+
+    // 真正退出（托盘退出 / 系统关机）时不再拦截关闭
+    state.listeners.get('before-quit')?.()
+    const quitPrevent = vi.fn()
+    closeHandler?.({ preventDefault: quitPrevent })
+    expect(quitPrevent).not.toHaveBeenCalled()
+    expect(win.hide).toHaveBeenCalledTimes(1)
+
     // 模拟退出：will-quit 应关闭数据库，文件句柄被释放后才可以删除
     const willQuit = state.listeners.get('will-quit')
     expect(typeof willQuit).toBe('function')
     willQuit?.()
     expect(() => rmSync(dbFile, { force: true })).not.toThrow()
+
+    const tray = state.trays[0] as { destroy: ReturnType<typeof vi.fn> }
+    expect(tray.destroy).toHaveBeenCalledTimes(1)
   })
 })

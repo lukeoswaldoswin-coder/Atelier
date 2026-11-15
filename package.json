@@ -65,7 +65,8 @@
                   "electronDist":  "node_modules/electron/dist",
                   "files":  [
                                 "out/**/*",
-                                "package.json"
+                                "package.json",
+                                "build/icon.png"
                             ],
                   "asarUnpack":  [
                                      "node_modules/koffi/**",

@@ -15,6 +15,7 @@ import { createIpcHandlers } from './ipc/handlers'
 import { registerIpcHandlers } from './ipc/register'
 import { createSenderGuard, getRendererAllowedEntries } from './security'
 import { createTimeService, type TimeService } from './time/time-service'
+import { createAppTray, showMainWindow, type AppTray } from './tray'
 import { createMainWindow } from './window'
 
 /** 冒烟模式：启动窗口、等页面加载完成后自动退出，用于在命令行里验证应用能否真正运行。 */
@@ -43,6 +44,45 @@ let timeService: TimeService | null = null
 let timeTicker: ReturnType<typeof setInterval> | null = null
 let activityMonitor: ActivityMonitor | null = null
 let dataController: ReturnType<typeof createDataController> | null = null
+/** 托盘图标；创建失败时保持 null，关闭窗口仍然是退出应用 */
+let appTray: AppTray | null = null
+/** 真正要退出的标志（托盘「退出」、系统关机、冒烟测试等），否则关窗只是隐藏 */
+let isQuitting = false
+/** 托盘提示只弹一次，避免每次关窗都打扰 */
+let trayHintShown = false
+
+/**
+ * 安装托盘并接管「关闭窗口」。
+ *
+ * 画师经常一边画画一边让本工具在后台记工时，直接关掉窗口会连带停止计时，
+ * 所以关闭操作改为收进托盘；要退出请用托盘菜单。
+ */
+function setupTray(win: BrowserWindow): void {
+  appTray = createAppTray({
+    win,
+    iconPath: join(app.getAppPath(), 'build', 'icon.png'),
+    onQuit: () => {
+      isQuitting = true
+      app.quit()
+    }
+  })
+
+  if (!appTray) {
+    console.warn('[atelier] 托盘图标不可用，关闭窗口将直接退出')
+    return
+  }
+  console.log('[atelier] 系统托盘已启用，关闭窗口后计时继续运行')
+
+  win.on('close', (event) => {
+    if (isQuitting) return
+    event.preventDefault()
+    win.hide()
+    if (!trayHintShown) {
+      trayHintShown = true
+      appTray?.notifyHidden()
+    }
+  })
+}
 
 function startTimeTicker(): void {
   if (timeTicker || !timeService) return
@@ -123,10 +163,7 @@ if (!hasSingleInstanceLock) {
 } else {
   app.on('second-instance', () => {
     const existing = BrowserWindow.getAllWindows()[0]
-    if (existing) {
-      if (existing.isMinimized()) existing.restore()
-      existing.focus()
-    }
+    if (existing) showMainWindow(existing)
   })
 
   void app.whenReady().then(() => {
@@ -300,11 +337,23 @@ if (!hasSingleInstanceLock) {
     powerMonitor.on('resume', () => activityMonitor?.handleResume())
 
     const win = createMainWindow()
+    setupTray(win)
     if (isSmokeTest) runSmokeCheck(win)
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
+      const existing = BrowserWindow.getAllWindows()[0]
+      if (existing) {
+        showMainWindow(existing)
+        return
+      }
+      const created = createMainWindow()
+      setupTray(created)
     })
+  })
+
+  app.on('before-quit', () => {
+    // 系统关机、托盘退出、冒烟测试等路径都必须真正关闭窗口
+    isQuitting = true
   })
 
   app.on('will-quit', () => {
@@ -313,6 +362,8 @@ if (!hasSingleInstanceLock) {
     activityMonitor?.stop()
     activityMonitor = null
     timeService = null
+    appTray?.destroy()
+    appTray = null
     database?.close()
     database = null
   })
