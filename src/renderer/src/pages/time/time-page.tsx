@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { TimeEntryView, TimeListFilter } from '@shared/domain'
 import { APP_KEY_LABELS } from '@shared/activity-apps'
 import { formatDuration } from '@shared/time-entries'
@@ -13,6 +14,7 @@ import { useAssignableTasks } from '@/data/assignable-tasks'
 import { removeTimeEntry, mergeTimeEntries } from '@/data/time-actions'
 import { useTimeEntries, useTimeSummary } from '@/data/time-entries'
 import { formatIpcError } from '@/lib/ipc-error'
+import { cn } from '@/lib/utils'
 import { TimeEntrySheet } from './time-entry-sheet'
 
 const FILTER_OPTIONS = [
@@ -30,9 +32,51 @@ function timeOfDay(iso: string, timeZone: string): string {
   return formatDateTimeInZone(iso, timeZone).slice(11, 16)
 }
 
+/** 框选矩形的最小拖动距离，低于该值视为普通点击，不改动选择。 */
+const MARQUEE_THRESHOLD_PX = 4
+
+interface ClientBox {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+function boxFromPoints(ax: number, ay: number, bx: number, by: number): ClientBox {
+  return {
+    left: Math.min(ax, bx),
+    top: Math.min(ay, by),
+    right: Math.max(ax, bx),
+    bottom: Math.max(ay, by)
+  }
+}
+
+function intersects(a: ClientBox, b: ClientBox): boolean {
+  return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom)
+}
+
 interface TimePageProps {
   /** 测试用：固定“今天” */
   today?: string
+}
+
+/** 这些元素保持原有行为，不触发框选。 */
+const INTERACTIVE_SELECTOR = [
+  'button',
+  'a',
+  'input',
+  'textarea',
+  'select',
+  'label',
+  '[role="button"]',
+  '[role="checkbox"]',
+  '[role="radio"]',
+  '[contenteditable="true"]'
+].join(',')
+
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  return target.closest(INTERACTIVE_SELECTOR) !== null
 }
 
 export function TimePage({ today: todayProp }: TimePageProps = {}) {
@@ -47,6 +91,11 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
   const [editing, setEditing] = useState<TimeEntryView | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<TimeEntryView | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [marquee, setMarquee] = useState<ClientBox | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const listRef = useRef<HTMLDivElement | null>(null)
+  /** 拖动起点（客户端坐标）；为 null 表示当前没有进行中的框选。 */
+  const dragStart = useRef<{ x: number; y: number } | null>(null)
 
   const fromIso = useMemo(() => dayStartIso(fromDate, timeZone), [fromDate, timeZone])
   const toIso = useMemo(() => dayStartIso(addDays(toDate, 1), timeZone), [toDate, timeZone])
@@ -69,6 +118,13 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
   }, [entries.rows, timeZone])
 
   const selectedEntries = entries.rows.filter((entry) => selected.has(entry.entry.id))
+  const unassignedIds = useMemo(
+    () =>
+      entries.rows
+        .filter((entry) => entry.entry.taskId === null)
+        .map((entry) => entry.entry.id),
+    [entries.rows]
+  )
   const canMerge =
     selectedEntries.length >= 2 &&
     selectedEntries.every(
@@ -78,6 +134,20 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
         (entry.entry.source !== 'auto' || entry.entry.appKey === selectedEntries[0]?.entry.appKey)
     )
 
+  // 查询结果变化（日期范围、筛选、增删改）后，丢弃已不在当前结果里的选择。
+  useEffect(() => {
+    const visible = new Set(entries.rows.map((entry) => entry.entry.id))
+    setSelected((previous) => {
+      const next = new Set([...previous].filter((id) => visible.has(id)))
+      return next.size === previous.size ? previous : next
+    })
+  }, [entries.rows])
+
+  /** 一键全选当前查询范围内的未分配记录。 */
+  function selectUnassigned(): void {
+    setSelected(new Set(unassignedIds))
+  }
+
   function toggleSelected(id: string): void {
     setSelected((previous) => {
       const next = new Set(previous)
@@ -85,6 +155,25 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
       else next.add(id)
       return next
     })
+  }
+
+  /** 按框选矩形更新选择：只收未分配记录，并整体替换本次框选结果。 */
+  function applyMarquee(box: ClientBox): void {
+    const container = listRef.current
+    if (!container) return
+    const next = new Set<string>()
+    const rows = container.querySelectorAll<HTMLElement>('[data-entry-id]')
+    for (const row of rows) {
+      const id = row.dataset['entryId']
+      if (!id) continue
+      if (row.dataset['assigned'] === 'true') continue
+      const rect = row.getBoundingClientRect()
+      if (rect.width === 0 && rect.height === 0) continue
+      if (intersects(box, { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom })) {
+        next.add(id)
+      }
+    }
+    setSelected(next)
   }
 
   async function deleteEntry(): Promise<void> {
@@ -126,6 +215,63 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
     }
   }
 
+  function clearMarquee(): void {
+    dragStart.current = null
+    setDragging(false)
+    setMarquee(null)
+  }
+
+  function updateMarquee(x: number, y: number): void {
+    const start = dragStart.current
+    if (!start) return
+    const box = boxFromPoints(start.x, start.y, x, y)
+    if (box.right - box.left < MARQUEE_THRESHOLD_PX && box.bottom - box.top < MARQUEE_THRESHOLD_PX) {
+      setMarquee(null)
+      return
+    }
+    setMarquee(box)
+    applyMarquee(box)
+  }
+
+  function startMarquee(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (event.button !== 0) return
+    if (isInteractiveTarget(event.target)) return
+    event.preventDefault()
+    dragStart.current = { x: event.clientX, y: event.clientY }
+    setDragging(true)
+  }
+
+  // 拖动期间在 window 上监听，鼠标移出列表或快速移动也能正确收尾。
+  useEffect(() => {
+    if (!dragging) return
+    const handleMove = (event: PointerEvent): void => {
+      // 鼠标在窗口外松开时收不到 pointerup，这里按按键状态兜底结束。
+      if (event.buttons === 0) {
+        updateMarquee(event.clientX, event.clientY)
+        clearMarquee()
+        return
+      }
+      updateMarquee(event.clientX, event.clientY)
+    }
+    const handleUp = (event: PointerEvent): void => {
+      updateMarquee(event.clientX, event.clientY)
+      clearMarquee()
+    }
+    const handleCancel = (): void => {
+      clearMarquee()
+    }
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleCancel)
+    window.addEventListener('blur', handleCancel)
+    return () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleCancel)
+      window.removeEventListener('blur', handleCancel)
+    }
+  }, [dragging])
+
   return (
     <div className="flex flex-col gap-3" data-testid="time-page">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -154,6 +300,15 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={unassignedIds.length === 0}
+            onClick={selectUnassigned}
+          >
+            全选未分配
+          </Button>
           <span className="text-xs text-muted-foreground" data-testid="time-total">
             {summary ? `实际 ${formatDuration(summary.totalSeconds)}` : '统计中…'}
           </span>
@@ -198,76 +353,106 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
         </p>
       ) : null}
 
-      {groups.map(([date, rows]) => (
-        <section key={date} className="flex flex-col gap-1">
-          <h2 className="text-xs font-medium text-muted-foreground">{date}</h2>
-          <div className="flex flex-col gap-1">
-            {rows.map((entry) => {
-              const isAuto = entry.entry.source === 'auto'
-              return (
-                <div
-                  key={entry.entry.id}
-                  data-testid="time-entry"
-                  className="flex items-start gap-2 rounded-md border border-border/60 px-3 py-2"
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-1 size-3.5"
-                    aria-label="选择工时记录"
-                    checked={selected.has(entry.entry.id)}
-                    onChange={() => toggleSelected(entry.entry.id)}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="tabular-nums text-foreground">
-                        {timeOfDay(entry.entry.startedAt, timeZone)} –{' '}
-                        {entry.entry.endedAt ? timeOfDay(entry.entry.endedAt, timeZone) : '—'}
-                      </span>
-                      <span className="font-medium text-foreground">
-                        {formatDuration(entry.entry.elapsedSeconds)}
-                      </span>
-                      <Badge variant={isAuto ? 'outline' : 'muted'}>{isAuto ? '自动' : '手动'}</Badge>
-                      {isAuto && entry.entry.appKey ? (
-                        <span className="text-[10px] text-muted-foreground">
-                          {APP_KEY_LABELS[entry.entry.appKey] ?? entry.entry.appKey}
-                        </span>
-                      ) : null}
+      {groups.length > 0 ? (
+        <div
+          ref={listRef}
+          data-testid="time-list"
+          onPointerDown={startMarquee}
+          className={cn('flex flex-col gap-3', dragging && 'cursor-crosshair select-none')}
+        >
+          {groups.map(([date, rows]) => (
+            <section key={date} className="flex flex-col gap-1">
+              <h2 className="text-xs font-medium text-muted-foreground">{date}</h2>
+              <div className="flex flex-col gap-1">
+                {rows.map((entry) => {
+                  const isAuto = entry.entry.source === 'auto'
+                  const assigned = entry.entry.taskId !== null
+                  return (
+                    <div
+                      key={entry.entry.id}
+                      data-testid="time-entry"
+                      data-entry-id={entry.entry.id}
+                      data-assigned={assigned ? 'true' : 'false'}
+                      className="flex items-start gap-2 rounded-md border border-border/60 px-3 py-2"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1 size-3.5"
+                        aria-label="选择工时记录"
+                        checked={selected.has(entry.entry.id)}
+                        onChange={() => toggleSelected(entry.entry.id)}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="tabular-nums text-foreground">
+                            {timeOfDay(entry.entry.startedAt, timeZone)} –{' '}
+                            {entry.entry.endedAt ? timeOfDay(entry.entry.endedAt, timeZone) : '—'}
+                          </span>
+                          <span className="font-medium text-foreground">
+                            {formatDuration(entry.entry.elapsedSeconds)}
+                          </span>
+                          <Badge variant={isAuto ? 'outline' : 'muted'}>
+                            {isAuto ? '自动' : '手动'}
+                          </Badge>
+                          {isAuto && entry.entry.appKey ? (
+                            <span className="text-[10px] text-muted-foreground">
+                              {APP_KEY_LABELS[entry.entry.appKey] ?? entry.entry.appKey}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {entry.task
+                            ? `${entry.commission?.title ?? '未知委托'} · ${entry.task.title}`
+                            : '未分配'}
+                        </p>
+                        {entry.entry.note ? (
+                          <p className="truncate text-[10px] text-muted-foreground">
+                            {entry.entry.note}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-[11px]"
+                          onClick={() => setEditing(entry)}
+                        >
+                          {entry.entry.taskId ? '编辑' : '归属'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-[11px] text-destructive"
+                          onClick={() => setDeleteTarget(entry)}
+                        >
+                          删除
+                        </Button>
+                      </div>
                     </div>
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {entry.task
-                        ? `${entry.commission?.title ?? '未知委托'} · ${entry.task.title}`
-                        : '未分配'}
-                    </p>
-                    {entry.entry.note ? (
-                      <p className="truncate text-[10px] text-muted-foreground">{entry.entry.note}</p>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-[11px]"
-                      onClick={() => setEditing(entry)}
-                    >
-                      {entry.entry.taskId ? '编辑' : '归属'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-[11px] text-destructive"
-                      onClick={() => setDeleteTarget(entry)}
-                    >
-                      删除
-                    </Button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      ))}
+                  )
+                })}
+              </div>
+            </section>
+          ))}
+
+          {marquee ? (
+            <div
+              data-testid="marquee-box"
+              aria-hidden="true"
+              className="pointer-events-none fixed z-50 rounded-sm border border-primary/70 bg-primary/15"
+              style={{
+                left: marquee.left,
+                top: marquee.top,
+                width: marquee.right - marquee.left,
+                height: marquee.bottom - marquee.top
+              }}
+            />
+          ) : null}
+        </div>
+      ) : null}
 
       {editing ? (
         <TimeEntrySheet

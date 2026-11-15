@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { AssignableTask, TimeEntryView, TimeSummaryOutput } from '@shared/domain'
 import { useTimeStore } from '@/stores/time-store'
@@ -206,5 +206,241 @@ describe('工时记录页', () => {
     render(<TimePage today="2026-11-14" />)
 
     expect(await screen.findByText('工时读取失败')).toBeInTheDocument()
+  })
+})
+
+const unassignedAuto2 = makeEntry({
+  id: '44444444-4444-4444-8444-444444444444',
+  taskId: null,
+  source: 'auto',
+  startedAt: '2026-11-14T05:00:00.000Z',
+  endedAt: '2026-11-14T05:05:00.000Z',
+  seconds: 300,
+  appKey: 'photoshop'
+})
+
+const assignedManual2 = makeEntry({
+  id: '55555555-5555-4555-8555-555555555555',
+  taskId: TASK.id,
+  source: 'manual',
+  startedAt: '2026-11-14T06:00:00.000Z',
+  endedAt: '2026-11-14T06:10:00.000Z',
+  seconds: 600
+})
+
+const allRows = [manualEntry, autoEntry, unassignedAuto2, assignedManual2]
+
+function stubRect(el: Element, top: number, bottom: number, left = 0, right = 400): void {
+  Object.defineProperty(el, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      top,
+      bottom,
+      left,
+      right,
+      width: right - left,
+      height: bottom - top,
+      x: left,
+      y: top,
+      toJSON: () => ({})
+    })
+  })
+}
+
+function stubRowRects(): void {
+  const rows = screen.getAllByTestId('time-entry')
+  stubRect(rows[0] as HTMLElement, 0, 40)
+  stubRect(rows[1] as HTMLElement, 50, 90)
+  stubRect(rows[2] as HTMLElement, 100, 140)
+  stubRect(rows[3] as HTMLElement, 150, 190)
+}
+
+function checkboxes(): HTMLInputElement[] {
+  return screen.getAllByLabelText('选择工时记录') as HTMLInputElement[]
+}
+
+function checkedIds(rows: TimeEntryView[]): string[] {
+  const boxes = checkboxes()
+  return rows.filter((_, index) => boxes[index]?.checked).map((row) => row.entry.id)
+}
+
+describe('工时记录批量选择', () => {
+  it('全选未分配只选中未分配记录', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    const user = userEvent.setup()
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    await user.click(screen.getByRole('button', { name: '全选未分配' }))
+
+    expect(checkedIds(allRows)).toEqual([autoEntry.entry.id, unassignedAuto2.entry.id])
+  })
+
+  it('筛选未分配时全选当前查询结果，切回全部也不选中已归属记录', async () => {
+    const unassignedOnly = [autoEntry, unassignedAuto2]
+    const list = vi.fn(async (input: { filter: string }) =>
+      input.filter === 'unassigned' ? unassignedOnly : allRows
+    )
+    installApi({ list })
+    const user = userEvent.setup()
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    await user.click(screen.getByRole('radio', { name: '未分配' }))
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ filter: 'unassigned' }))
+    )
+
+    await user.click(screen.getByRole('button', { name: '全选未分配' }))
+    expect(checkedIds(unassignedOnly)).toEqual([autoEntry.entry.id, unassignedAuto2.entry.id])
+
+    await user.click(screen.getByRole('radio', { name: '全部' }))
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ filter: 'all' }))
+    )
+    await user.click(screen.getByRole('button', { name: '全选未分配' }))
+    expect(checkedIds(allRows)).toEqual([autoEntry.entry.id, unassignedAuto2.entry.id])
+  })
+
+  it('没有未分配记录时全选按钮禁用', async () => {
+    installApi({ list: vi.fn(async () => [manualEntry, assignedManual2]) })
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    expect(screen.getByRole('button', { name: '全选未分配' })).toBeDisabled()
+  })
+
+  it('全选后可以继续合并未分配记录', async () => {
+    const merge = vi.fn(async () => autoEntry)
+    installApi({ list: vi.fn(async () => allRows), merge })
+    const user = userEvent.setup()
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    await user.click(screen.getByRole('button', { name: '全选未分配' }))
+    await user.click(screen.getByRole('button', { name: /合并/ }))
+
+    await waitFor(() =>
+      expect(merge).toHaveBeenCalledWith({ ids: [autoEntry.entry.id, unassignedAuto2.entry.id] })
+    )
+  })
+
+  it('拖拽框选只选中相交的未分配记录，并与复选框状态一致', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    stubRowRects()
+
+    const list = screen.getByTestId('time-list')
+    fireEvent.pointerDown(list, { button: 0, clientX: 10, clientY: 45 })
+    fireEvent.pointerMove(window, { clientX: 200, clientY: 95, buttons: 1 })
+
+    expect(screen.getByTestId('marquee-box')).toBeInTheDocument()
+    expect(checkedIds(allRows)).toEqual([autoEntry.entry.id])
+
+    fireEvent.pointerUp(window, { clientX: 200, clientY: 95 })
+    expect(screen.queryByTestId('marquee-box')).not.toBeInTheDocument()
+    expect(checkedIds(allRows)).toEqual([autoEntry.entry.id])
+  })
+
+  it('框选不会选中已归属记录', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    stubRowRects()
+
+    const list = screen.getByTestId('time-list')
+    fireEvent.pointerDown(list, { button: 0, clientX: 10, clientY: 5 })
+    fireEvent.pointerMove(window, { clientX: 200, clientY: 200, buttons: 1 })
+
+    // 矩形覆盖全部 4 条，其中 2 条已归属，只有未分配的 2 条进入选择。
+    expect(checkedIds(allRows)).toEqual([autoEntry.entry.id, unassignedAuto2.entry.id])
+
+    fireEvent.pointerUp(window, { clientX: 200, clientY: 200 })
+    expect(checkedIds(allRows)).toEqual([autoEntry.entry.id, unassignedAuto2.entry.id])
+  })
+
+  it('点击复选框、归属、编辑、删除按钮都不会启动框选', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    const user = userEvent.setup()
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    stubRowRects()
+
+    const rows = screen.getAllByTestId('time-entry') as HTMLElement[]
+    const targets = [
+      within(rows[1] as HTMLElement).getByLabelText('选择工时记录'),
+      within(rows[0] as HTMLElement).getByRole('button', { name: '编辑' }),
+      within(rows[1] as HTMLElement).getByRole('button', { name: '归属' }),
+      within(rows[0] as HTMLElement).getByRole('button', { name: '删除' })
+    ]
+
+    for (const target of targets) {
+      fireEvent.pointerDown(target, { button: 0, clientX: 10, clientY: 5 })
+      fireEvent.pointerMove(window, { clientX: 200, clientY: 200, buttons: 1 })
+      expect(screen.queryByTestId('marquee-box')).not.toBeInTheDocument()
+      fireEvent.pointerUp(window, { clientX: 200, clientY: 200 })
+    }
+
+    // 复选框本身的点击行为保持不变。
+    await user.click(within(rows[1] as HTMLElement).getByLabelText('选择工时记录'))
+    expect(checkedIds(allRows)).toEqual([autoEntry.entry.id])
+  })
+
+  it('框选结果可以直接用于批量合并', async () => {
+    const merge = vi.fn(async () => autoEntry)
+    installApi({ list: vi.fn(async () => allRows), merge })
+    const user = userEvent.setup()
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    stubRowRects()
+
+    const list = screen.getByTestId('time-list')
+    fireEvent.pointerDown(list, { button: 0, clientX: 10, clientY: 45 })
+    fireEvent.pointerMove(window, { clientX: 200, clientY: 140, buttons: 1 })
+    fireEvent.pointerUp(window, { clientX: 200, clientY: 140 })
+
+    await user.click(screen.getByRole('button', { name: /合并/ }))
+    await waitFor(() =>
+      expect(merge).toHaveBeenCalledWith({ ids: [autoEntry.entry.id, unassignedAuto2.entry.id] })
+    )
+  })
+
+  it('轻微拖动不产生框选，不改变选择', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    stubRowRects()
+
+    const list = screen.getByTestId('time-list')
+    fireEvent.pointerDown(list, { button: 0, clientX: 10, clientY: 45 })
+    fireEvent.pointerMove(window, { clientX: 12, clientY: 46, buttons: 1 })
+    expect(screen.queryByTestId('marquee-box')).not.toBeInTheDocument()
+    fireEvent.pointerUp(window, { clientX: 12, clientY: 46 })
+
+    expect(checkedIds(allRows)).toEqual([])
+  })
+
+  it('鼠标在窗口外松开时框选正常结束', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    stubRowRects()
+
+    const list = screen.getByTestId('time-list')
+    fireEvent.pointerDown(list, { button: 0, clientX: 10, clientY: 5 })
+    fireEvent.pointerMove(window, { clientX: 200, clientY: 60, buttons: 1 })
+    expect(screen.getByTestId('marquee-box')).toBeInTheDocument()
+
+    // 窗口外松开：后续 pointermove 的 buttons 为 0，据此收尾。
+    fireEvent.pointerMove(window, { clientX: 200, clientY: 60, buttons: 0 })
+    expect(screen.queryByTestId('marquee-box')).not.toBeInTheDocument()
+    expect(checkedIds(allRows)).toEqual([autoEntry.entry.id])
   })
 })
