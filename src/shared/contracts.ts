@@ -12,6 +12,10 @@ import { scheduleApplyInputSchema, scheduleApplyOutputSchema } from './schedulin
 import {
   assignableTaskSchema,
   byIdInputSchema,
+  calendarActivitySummaryInputSchema,
+  calendarActivitySummaryOutputSchema,
+  calendarDayDetailInputSchema,
+  calendarDayDetailOutputSchema,
   calendarTasksInputSchema,
   calendarTasksOutputSchema,
   clientSchema,
@@ -174,6 +178,15 @@ export const ipcContracts = {
   [IpcChannel.calendarTasks]: {
     input: calendarTasksInputSchema,
     output: calendarTasksOutputSchema
+  },
+
+  [IpcChannel.calendarActivity]: {
+    input: calendarActivitySummaryInputSchema,
+    output: calendarActivitySummaryOutputSchema
+  },
+  [IpcChannel.calendarDayDetail]: {
+    input: calendarDayDetailInputSchema,
+    output: calendarDayDetailOutputSchema
   },
 
   [IpcChannel.scheduleApply]: {

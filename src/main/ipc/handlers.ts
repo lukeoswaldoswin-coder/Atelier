@@ -4,6 +4,7 @@ import { clientSchema, commissionSchema, taskSchema } from '@shared/domain'
 import type { ClientsRepository } from '../db/repositories/clients'
 import type { CommissionsRepository } from '../db/repositories/commissions'
 import type { TasksRepository } from '../db/repositories/tasks'
+import type { CalendarActivityRepository } from '../db/repositories/calendar-activity'
 import type { ActivityMonitor } from '../activity/activity-monitor'
 import type { DataController } from '../data/controller'
 import type { TimeService } from '../time/time-service'
@@ -16,6 +17,8 @@ export interface IpcHandlerDeps {
   clients: ClientsRepository
   commissions: CommissionsRepository
   tasks: TasksRepository
+  /** 每日创作工时聚合（P6.7）。 */
+  calendarActivity: CalendarActivityRepository
   time: TimeService
   monitor: ActivityMonitor
   data: DataController
@@ -34,7 +37,7 @@ export interface IpcHandlerDeps {
  * 非法数据不会越过进程边界。
  */
 export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
-  const { clients, commissions, tasks, time, monitor, data } = deps
+  const { clients, commissions, tasks, calendarActivity, time, monitor, data } = deps
 
   return {
     [IpcChannel.appGetInfo]: async (payload) => {
@@ -145,6 +148,18 @@ export function createIpcHandlers(deps: IpcHandlerDeps): IpcHandlers {
     [IpcChannel.calendarTasks]: async (payload) => {
       const input = ipcContracts[IpcChannel.calendarTasks].input.parse(payload)
       return ipcContracts[IpcChannel.calendarTasks].output.parse(tasks.calendar(input))
+    },
+
+    [IpcChannel.calendarActivity]: async (payload) => {
+      const input = ipcContracts[IpcChannel.calendarActivity].input.parse(payload)
+      return ipcContracts[IpcChannel.calendarActivity].output.parse(calendarActivity.summary(input))
+    },
+
+    [IpcChannel.calendarDayDetail]: async (payload) => {
+      const input = ipcContracts[IpcChannel.calendarDayDetail].input.parse(payload)
+      return ipcContracts[IpcChannel.calendarDayDetail].output.parse(
+        calendarActivity.dayDetail(input)
+      )
     },
 
     [IpcChannel.scheduleApply]: async (payload) => {

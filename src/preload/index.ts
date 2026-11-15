@@ -42,7 +42,9 @@ const api: AtelierApi = {
   },
 
   calendar: {
-    tasks: (input) => ipcRenderer.invoke(IpcChannel.calendarTasks, input)
+    tasks: (input) => ipcRenderer.invoke(IpcChannel.calendarTasks, input),
+    activity: (input) => ipcRenderer.invoke(IpcChannel.calendarActivity, input),
+    dayDetail: (input) => ipcRenderer.invoke(IpcChannel.calendarDayDetail, input)
   },
 
   schedule: {

@@ -29,6 +29,8 @@ export const IpcChannel = {
   tasksWorkbench: 'tasks:workbench',
 
   calendarTasks: 'calendar:tasks',
+  calendarActivity: 'calendar:activity',
+  calendarDayDetail: 'calendar:day-detail',
 
   scheduleApply: 'schedule:apply',
 

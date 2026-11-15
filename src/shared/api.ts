@@ -1,6 +1,10 @@
 import type {
   AssignableTask,
   ByIdInput,
+  CalendarActivitySummaryInput,
+  CalendarActivitySummaryOutput,
+  CalendarDayDetailInput,
+  CalendarDayDetailOutput,
   CalendarTasksInput,
   CalendarTasksOutput,
   Client,
@@ -78,6 +82,10 @@ export interface AtelierApi {
 
   calendar: {
     tasks(input: CalendarTasksInput): Promise<CalendarTasksOutput>
+    /** 月视图每日创作摘要：只返回有工时的日期（P6.7） */
+    activity(input: CalendarActivitySummaryInput): Promise<CalendarActivitySummaryOutput>
+    /** 某一天的创作详情：按任务聚合，未关联任务的记录单列（P6.7） */
+    dayDetail(input: CalendarDayDetailInput): Promise<CalendarDayDetailOutput>
   }
 
   schedule: {

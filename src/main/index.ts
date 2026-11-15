@@ -10,6 +10,7 @@ import { createDataPaths } from './data/data-paths'
 import { createRestoreService } from './data/restore-service'
 import { quarantineOrphanSidecars, recoverRestoreState } from './data/startup-recovery'
 import { createDatabaseService, type DatabaseService } from './db/service'
+import { createCalendarActivityRepository } from './db/repositories/calendar-activity'
 import { getAppliedMigrations } from './db/migrator'
 import { createIpcHandlers } from './ipc/handlers'
 import { registerIpcHandlers } from './ipc/register'
@@ -325,6 +326,7 @@ if (!hasSingleInstanceLock) {
         clients: database.clients,
         commissions: database.commissions,
         tasks: database.tasks,
+        calendarActivity: createCalendarActivityRepository(database.db),
         time: timeService as TimeService,
         monitor: activityMonitor as ActivityMonitor,
         data: dataController,

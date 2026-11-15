@@ -9,6 +9,7 @@ import { createClientsRepository, type ClientsRepository } from '../db/repositor
 import { createCommissionsRepository, type CommissionsRepository } from '../db/repositories/commissions'
 import { createTasksRepository, type TasksRepository } from '../db/repositories/tasks'
 import { createTimeEntriesRepository } from '../db/repositories/time-entries'
+import { createCalendarActivityRepository } from '../db/repositories/calendar-activity'
 import type { ActivityMonitor } from '../activity/activity-monitor'
 import type { DataController } from '../data/controller'
 import { createTimeService, type TimeService } from '../time/time-service'
@@ -100,6 +101,7 @@ function setup(): HandlersFixture {
     clients,
     commissions,
     tasks,
+    calendarActivity: createCalendarActivityRepository(db),
     time,
     monitor: makeMonitor(),
     data: makeData()
@@ -460,6 +462,36 @@ describe('createIpcHandlers', () => {
     db.close()
   })
 
+  it('calendar:activity / calendar:day-detail 走契约校验并返回聚合结果', async () => {
+    const { handlers, db } = setup()
+
+    const empty = (await handlers[IpcChannel.calendarActivity]({
+      from: '2026-03-01',
+      to: '2026-03-31'
+    })) as { days: unknown[] }
+    expect(empty.days).toEqual([])
+
+    const detail = (await handlers[IpcChannel.calendarDayDetail]({
+      date: '2026-03-02'
+    })) as { date: string; totalSeconds: number; tasks: unknown[] }
+    expect(detail).toMatchObject({ date: '2026-03-02', totalSeconds: 0, tasks: [] })
+
+    // 非法区间、超范围、非法日期都必须在边界被拒绝
+    await expect(
+      handlers[IpcChannel.calendarActivity]({ from: '2026-04-01', to: '2026-03-01' })
+    ).rejects.toThrow()
+    await expect(
+      handlers[IpcChannel.calendarActivity]({ from: '2026-01-01', to: '2026-12-31' })
+    ).rejects.toThrow()
+    await expect(
+      handlers[IpcChannel.calendarDayDetail]({ date: '2026-02-30' })
+    ).rejects.toThrow()
+    await expect(
+      handlers[IpcChannel.calendarDayDetail]({ date: '2026-03-02', extra: true })
+    ).rejects.toThrow()
+    db.close()
+  })
+
   it('schedule:apply 校验建议快照并批量写入，过期时拒绝', async () => {
     const { handlers, db, commissions, tasks } = setup()
     const client = (await handlers[IpcChannel.clientsCreate]({ name: '客户' })) as Client
@@ -669,6 +701,7 @@ describe('createIpcHandlers', () => {
       clients: dirtyClients,
       commissions: {} as CommissionsRepository,
       tasks: {} as TasksRepository,
+      calendarActivity: {} as ReturnType<typeof createCalendarActivityRepository>,
       time: {} as TimeService,
       monitor: {} as ActivityMonitor,
       data: makeData()
