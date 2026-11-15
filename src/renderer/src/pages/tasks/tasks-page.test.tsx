@@ -398,4 +398,34 @@ describe('绘画任务工作台', () => {
 
     expect(await screen.findByText(/还没有待处理的绘画任务/)).toBeInTheDocument()
   })
+
+  it('从日历跳转过来时定位高亮目标任务，并清空一次性意图', async () => {
+    install(makeApi({ pending: [pendingItem], done: [doneItem] }))
+    useNavigationStore.setState({ focusTaskId: doneItem.task.id })
+
+    render(<TasksPage />)
+
+    // 已完成任务默认折叠，定位时必须自动展开，否则高亮不可见
+    const row = await waitFor(() => {
+      const found = document.querySelector(`[data-task-id="${doneItem.task.id}"]`)
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    expect(row).toHaveAttribute('data-focused', 'true')
+    expect(row).toHaveTextContent('背景上色')
+
+    // 意图只消费一次
+    await waitFor(() => expect(useNavigationStore.getState().focusTaskId).toBeNull())
+  })
+
+  it('定位意图指向不存在的任务时直接丢弃，不影响页面', async () => {
+    install(makeApi({ pending: [pendingItem], done: [] }))
+    useNavigationStore.setState({ focusTaskId: '99999999-9999-4999-8999-999999999999' })
+
+    render(<TasksPage />)
+    await screen.findByText('人物线稿')
+
+    await waitFor(() => expect(useNavigationStore.getState().focusTaskId).toBeNull())
+    expect(screen.getByText('人物线稿')).toBeInTheDocument()
+  })
 })

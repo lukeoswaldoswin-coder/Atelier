@@ -110,6 +110,14 @@ export function formatDayNumber(date: string): number {
   return parseDateString(date).day
 }
 
+/** 详情面板标题：`2026 年 3 月 2 日 周一`。 */
+export function formatDayTitle(date: string): string {
+  const parts = parseDateString(date)
+  const weekday = toUtc(parts).getUTCDay()
+  const label = WEEKDAY_LABELS[(weekday + 6) % 7] ?? ''
+  return `${parts.year} 年 ${parts.month} 月 ${parts.day} 日 周${label}`
+}
+
 export function isPastDate(date: string, today: string): boolean {
   return date < today
 }

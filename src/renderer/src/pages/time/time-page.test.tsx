@@ -3,6 +3,7 @@ import { render, screen, waitFor, within, fireEvent } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import type { AssignableTask, TimeEntryView, TimeSummaryOutput } from '@shared/domain'
 import { useTimeStore } from '@/stores/time-store'
+import { useNavigationStore } from '@/stores/navigation-store'
 import { TimePage } from './time-page'
 
 const TASK: AssignableTask = {
@@ -103,6 +104,7 @@ function installApi(overrides: {
 
 beforeEach(() => {
   useTimeStore.setState({ actionVersion: 0, status: null })
+  useNavigationStore.setState({ timeFilter: null })
 })
 
 afterEach(() => {
@@ -616,5 +618,47 @@ describe('工时记录批量选择', () => {
     expect(selectAll.className).toContain('bg-primary')
     expect(selectAll.className).toContain('h-9')
     expect(selectAll.className).not.toContain('border border-input')
+  })
+})
+
+describe('工时记录页：外部指定的筛选意图（来自日历）', () => {
+  it('应用日期区间与任务筛选，并清空一次性意图', async () => {
+    const { list } = installApi()
+    useNavigationStore.setState({
+      timeFilter: { from: '2026-11-10', to: '2026-11-10', taskId: TASK.id }
+    })
+
+    render(<TimePage today="2026-11-14" />)
+
+    await waitFor(() =>
+      expect(list).toHaveBeenCalledWith(
+        expect.objectContaining({ filter: 'all', taskId: TASK.id })
+      )
+    )
+    expect(screen.getByLabelText('开始日期')).toHaveValue('2026-11-10')
+    expect(screen.getByLabelText('结束日期')).toHaveValue('2026-11-10')
+
+    const banner = await screen.findByTestId('time-task-filter')
+    expect(banner).toHaveTextContent('构图草稿')
+
+    // 消费后必须清空，否则下次进入会被旧筛选覆盖
+    await waitFor(() => expect(useNavigationStore.getState().timeFilter).toBeNull())
+  })
+
+  it('可以取消任务收窄，回到全部任务', async () => {
+    const { list } = installApi()
+    useNavigationStore.setState({
+      timeFilter: { from: '2026-11-10', to: '2026-11-10', taskId: TASK.id }
+    })
+    const user = userEvent.setup()
+
+    render(<TimePage today="2026-11-14" />)
+    await screen.findByTestId('time-task-filter')
+    await user.click(screen.getByRole('button', { name: '显示全部任务' }))
+
+    await waitFor(() => expect(screen.queryByTestId('time-task-filter')).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(expect.not.objectContaining({ taskId: TASK.id }))
+    )
   })
 })

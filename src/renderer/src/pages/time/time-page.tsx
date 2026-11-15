@@ -15,6 +15,7 @@ import { removeTimeEntry, mergeTimeEntries } from '@/data/time-actions'
 import { useTimeEntries, useTimeSummary } from '@/data/time-entries'
 import { formatIpcError } from '@/lib/ipc-error'
 import { cn } from '@/lib/utils'
+import { useNavigationStore } from '@/stores/navigation-store'
 import { TimeEntrySheet } from './time-entry-sheet'
 
 const FILTER_OPTIONS = [
@@ -86,6 +87,8 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
   const [fromDate, setFromDate] = useState(today)
   const [toDate, setToDate] = useState(today)
   const [filter, setFilter] = useState<TimeListFilter>('all')
+  /** 从日历跳转过来时按任务收窄（P6.7）；null 表示不按任务过滤 */
+  const [taskFilter, setTaskFilter] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<TimeEntryView | null>(null)
@@ -100,9 +103,28 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
   const fromIso = useMemo(() => dayStartIso(fromDate, timeZone), [fromDate, timeZone])
   const toIso = useMemo(() => dayStartIso(addDays(toDate, 1), timeZone), [toDate, timeZone])
 
-  const entries = useTimeEntries(fromIso, toIso, filter, version)
+  const entries = useTimeEntries(fromIso, toIso, filter, version, taskFilter)
   const summary = useTimeSummary(fromIso, toIso, version)
   const { tasks } = useAssignableTasks()
+
+  // 消费「按日期/任务筛选工时」的一次性意图（来自日历），消费后立刻清空，
+  // 避免下次从侧边栏进入工时页时又被旧筛选覆盖。
+  const timeFilterIntent = useNavigationStore((store) => store.timeFilter)
+  const clearTimeFilter = useNavigationStore((store) => store.clearTimeFilter)
+
+  useEffect(() => {
+    if (!timeFilterIntent) return
+    setFromDate(timeFilterIntent.from)
+    setToDate(timeFilterIntent.to)
+    setTaskFilter(timeFilterIntent.taskId ?? null)
+    setSelected(new Set())
+    clearTimeFilter()
+  }, [timeFilterIntent, clearTimeFilter])
+
+  const taskFilterTitle = useMemo(
+    () => (taskFilter ? (tasks.find((item) => item.id === taskFilter)?.title ?? null) : null),
+    [taskFilter, tasks]
+  )
 
   const bump = (): void => setVersion((value) => value + 1)
 
@@ -328,6 +350,26 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
           </Button>
         </div>
       </div>
+
+      {taskFilter ? (
+        <p
+          className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-[11px] text-muted-foreground"
+          data-testid="time-task-filter"
+        >
+          <span>
+            只看任务：{taskFilterTitle ?? '已选任务'}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-1.5 text-[10px]"
+            onClick={() => setTaskFilter(null)}
+          >
+            显示全部任务
+          </Button>
+        </p>
+      ) : null}
 
       {summary && summary.unassignedSeconds > 0 ? (
         <p className="text-[11px] text-warning" data-testid="unassigned-total">

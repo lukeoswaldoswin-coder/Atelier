@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkbenchTask } from '@shared/domain'
 import { TASK_STAGE_LABELS, TASK_STATUS_LABELS } from '@shared/tasks'
 import { formatClock, formatDuration } from '@shared/time-entries'
@@ -157,12 +157,15 @@ const ROW_ACTION = 'h-7 px-2 text-[11px]'
 function TaskRow({
   item,
   isCurrent,
+  highlighted,
   disabled,
   onStart,
   onToggleDone
 }: {
   item: WorkbenchTask
   isCurrent: boolean
+  /** 由日历等页面跳转过来时定位高亮该任务 */
+  highlighted: boolean
   disabled: boolean
   onStart: (item: WorkbenchTask) => void
   onToggleDone: (item: WorkbenchTask) => void
@@ -175,9 +178,11 @@ function TaskRow({
     <div
       data-testid="workbench-task"
       data-task-id={task.id}
+      data-focused={highlighted ? 'true' : undefined}
       className={cn(
         'flex flex-col gap-1 rounded-md border border-border/60 px-3 py-2',
-        isCurrent && 'border-primary/50 bg-primary/5'
+        isCurrent && 'border-primary/50 bg-primary/5',
+        highlighted && 'border-primary/60 bg-primary/5 ring-1 ring-primary/40'
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -252,6 +257,9 @@ export function TasksPage() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [switchTarget, setSwitchTarget] = useState<WorkbenchTask | null>(null)
   const [completeTarget, setCompleteTarget] = useState<WorkbenchTask | null>(null)
+  /** 从日历等页面跳转过来时定位高亮的任务；保留在本页，不随意图清空而消失 */
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
+  const pageRef = useRef<HTMLDivElement | null>(null)
 
   const workbench = useWorkbench({ includeDone: true, includeArchived: false })
   const status = useTimeStore((store) => store.status)
@@ -259,12 +267,43 @@ export function TasksPage() {
   const startTask = useTimeStore((store) => store.startTask)
   const stopTask = useTimeStore((store) => store.stopTask)
 
+  const focusTaskId = useNavigationStore((store) => store.focusTaskId)
+  const clearFocusTask = useNavigationStore((store) => store.clearFocusTask)
+
   const currentTaskId = status?.taskSession?.taskId ?? null
 
   const pending = workbench.data?.pending ?? []
   const done = useMemo(() => workbench.data?.done ?? [], [workbench.data])
 
   const visible = filter === 'pending' ? pending : [...pending, ...done]
+
+  // 消费「定位任务」一次性意图：确保目标任务可见并记录高亮目标。
+  // 数据未就绪时先等一轮，避免把还在加载的任务当成不存在而丢掉意图。
+  useEffect(() => {
+    if (!focusTaskId) return
+
+    const inPending = pending.some((item) => item.task.id === focusTaskId)
+    const inDone = done.some((item) => item.task.id === focusTaskId)
+
+    if (!inPending && !inDone) {
+      if (workbench.loading) return
+      clearFocusTask()
+      return
+    }
+
+    // 已完成的任务默认折叠，定位时必须展开，否则高亮不可见。
+    // 不动筛选条件，避免把「全部」下的已完成任务再渲染一遍。
+    if (inDone) setIncludeDone(true)
+    setFocusedTaskId(focusTaskId)
+    clearFocusTask()
+  }, [focusTaskId, pending, done, workbench.loading, clearFocusTask])
+
+  // 定位到目标任务：等它渲染出来后滚动到可见区域
+  useEffect(() => {
+    if (!focusedTaskId) return
+    const element = pageRef.current?.querySelector(`[data-task-id="${focusedTaskId}"]`)
+    element?.scrollIntoView?.({ block: 'center' })
+  }, [focusedTaskId, visible.length, includeDone])
 
   function beginStart(item: WorkbenchTask): void {
     setActionError(null)
@@ -320,7 +359,7 @@ export function TasksPage() {
   const interactionsDisabled = timerBusy || busyId !== null
 
   return (
-    <div className="flex flex-col gap-4" data-testid="tasks-page">
+    <div ref={pageRef} className="flex flex-col gap-4" data-testid="tasks-page">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">绘画任务</h1>
@@ -368,6 +407,7 @@ export function TasksPage() {
             key={item.task.id}
             item={item}
             isCurrent={item.task.id === currentTaskId}
+            highlighted={item.task.id === focusedTaskId}
             disabled={interactionsDisabled}
             onStart={beginStart}
             onToggleDone={requestToggleDone}
@@ -390,6 +430,7 @@ export function TasksPage() {
                   key={item.task.id}
                   item={item}
                   isCurrent={item.task.id === currentTaskId}
+                  highlighted={item.task.id === focusedTaskId}
                   disabled={interactionsDisabled}
                   onStart={beginStart}
                   onToggleDone={requestToggleDone}

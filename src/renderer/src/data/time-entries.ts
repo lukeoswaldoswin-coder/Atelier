@@ -14,7 +14,9 @@ export function useTimeEntries(
   from: string,
   to: string,
   filter: TimeListFilter,
-  version: number
+  version: number,
+  /** 只看某个任务的工时（P6.7 从日历跳转过来时使用）；省略表示不按任务收窄。 */
+  taskId?: string | null
 ): TimeEntriesState {
   const [state, setState] = useState<{ status: 'loading' | 'ready' | 'error'; rows: TimeEntryView[]; error: string | null }>(
     { status: 'loading', rows: [], error: null }
@@ -25,7 +27,9 @@ export function useTimeEntries(
     setState((previous) => ({ ...previous, status: 'loading', error: null }))
     void (async () => {
       try {
-        const rows = await getAtelierApi().time.list({ from, to, filter })
+        const rows = await getAtelierApi().time.list(
+          taskId ? { from, to, filter, taskId } : { from, to, filter }
+        )
         if (!cancelled) setState({ status: 'ready', rows, error: null })
       } catch (caught) {
         if (!cancelled) {
@@ -37,7 +41,7 @@ export function useTimeEntries(
     return () => {
       cancelled = true
     }
-  }, [from, to, filter, version])
+  }, [from, to, filter, version, taskId])
 
   return { ...state, reload: () => setState((previous) => ({ ...previous })) }
 }
