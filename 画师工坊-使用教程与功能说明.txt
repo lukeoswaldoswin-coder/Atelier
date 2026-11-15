@@ -216,6 +216,7 @@ C:\Users\11415\AppData\Local\Atelier\release\画师工坊-Setup-0.1.0.exe
 - 支持：
   Adobe Photoshop
   Clip Studio Paint
+  优动漫 PAINT（CSP 中文版）
   PaintTool SAI
   Krita
   Blender

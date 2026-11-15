@@ -10,6 +10,14 @@ describe('绘画软件进程名识别', () => {
     expect(resolveAppKey('clipstudiopaint.exe')).toBe('clipstudio')
   })
 
+  it('识别优动漫 PAINT（CSP 中文版）的进程名', () => {
+    expect(resolveAppKey('UDMPaint.exe')).toBe('clipstudio')
+    expect(resolveAppKey('UDMPaintPRO.exe')).toBe('clipstudio')
+    expect(resolveAppKey('udmpaintpro.exe')).toBe('clipstudio')
+    // 版本改名后仍应识别（例如带数字后缀）
+    expect(resolveAppKey('UDMPaint4.exe')).toBe('clipstudio')
+  })
+
   it('保留原有的受支持应用识别', () => {
     expect(resolveAppKey('Photoshop.exe')).toBe('photoshop')
     expect(resolveAppKey('clipstudio.exe')).toBe('clipstudio')
@@ -26,6 +34,8 @@ describe('绘画软件进程名识别', () => {
   it('未支持的进程与空值返回 null', () => {
     expect(resolveAppKey('chrome.exe')).toBeNull()
     expect(resolveAppKey('clipstudiopaint')).toBeNull()
+    expect(resolveAppKey('udmpaint')).toBeNull()
+    expect(resolveAppKey('udmpaint.png')).toBeNull()
     expect(resolveAppKey('')).toBeNull()
     expect(resolveAppKey(null)).toBeNull()
     expect(resolveAppKey(undefined)).toBeNull()
