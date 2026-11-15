@@ -23,6 +23,8 @@ interface AutoSession {
   entryId: string
   appKey: string
   startedMono: number
+  /** 片段的墙钟起点，用于落 time_entry_segments 的真实起止 */
+  startedWall: number
   lastCheckpointMono: number
   lastSampleMono: number
 }
@@ -91,6 +93,26 @@ export function createActivityMonitor(deps: MonitorDeps) {
       note: reason,
       updatedAt: endedAt
     })
+
+    // 明细：真实墙钟起止 + 本段秒数。0 秒片段不写（没有信息量）。
+    // 片段不改变 elapsed_seconds 的语义，也不参与任何金额/统计口径的二次计算。
+    if (elapsed > 0) {
+      try {
+        deps.timeEntries.appendSegment({
+          id: randomUUID(),
+          entryId: auto.entryId,
+          startedAt: new Date(auto.startedWall).toISOString(),
+          endedAt,
+          seconds: elapsed,
+          createdAt: endedAt,
+          updatedAt: endedAt
+        })
+      } catch (caught) {
+        // 明细写入失败不能影响自动计时的正常结算
+        error = caught instanceof Error ? caught.message : String(caught)
+      }
+    }
+
     auto = null
   }
 
@@ -112,6 +134,7 @@ export function createActivityMonitor(deps: MonitorDeps) {
       entryId: id,
       appKey,
       startedMono: monotonic(),
+      startedWall: wall(),
       lastCheckpointMono: monotonic(),
       lastSampleMono: monotonic()
     }

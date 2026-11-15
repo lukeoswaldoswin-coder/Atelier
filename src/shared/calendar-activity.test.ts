@@ -206,6 +206,53 @@ describe('attributeEntryToDays：多片段', () => {
     expect(sum(slices)).toBe(5400)
     expect(totalOf(slices, '2026-11-18')).toBe(5400)
   })
+
+  it('片段合计超过 elapsed 时按 elapsed 缩放，绝不重复累计', () => {
+    // 用户手工把工时改短（updateCompleted 重算 elapsed，但不会改写历史片段）
+    const shrunk = {
+      startedAt: '2026-11-18T01:00:00.000Z',
+      endedAt: '2026-11-18T09:00:00.000Z',
+      elapsedSeconds: 1800 // 片段合计 5400，比权威值多
+    }
+    const segments: SegmentLike[] = [
+      { startedAt: '2026-11-18T01:00:00.000Z', endedAt: '2026-11-18T02:00:00.000Z', seconds: 3600 },
+      { startedAt: '2026-11-18T05:00:00.000Z', endedAt: '2026-11-18T05:30:00.000Z', seconds: 1800 }
+    ]
+
+    const slices = attributeEntryToDays(shrunk, segments, 'Asia/Shanghai')
+    expect(sum(slices)).toBe(1800)
+    expect(totalOf(slices, '2026-11-18')).toBe(1800)
+  })
+
+  it('跨午夜片段超量时缩放后仍按原分布拆到两天，且合计守恒', () => {
+    const shrunk = {
+      startedAt: '2026-11-18T15:40:00.000Z',
+      endedAt: '2026-11-18T16:20:00.000Z',
+      elapsedSeconds: 1200 // 权威值只有 20 分钟，片段记录 40 分钟
+    }
+    const segments: SegmentLike[] = [
+      {
+        startedAt: '2026-11-18T15:40:00.000Z',
+        endedAt: '2026-11-18T16:20:00.000Z',
+        seconds: 2400
+      }
+    ]
+
+    const slices = attributeEntryToDays(shrunk, segments, 'Asia/Shanghai')
+    expect(sum(slices)).toBe(1200)
+    expect(slices.map((slice) => slice.date)).toEqual(['2026-11-18', '2026-11-19'])
+    expect(totalOf(slices, '2026-11-18')).toBe(600)
+    expect(totalOf(slices, '2026-11-19')).toBe(600)
+  })
+
+  it('elapsed 为 0 但存在片段时，不产生任何日期', () => {
+    const slices = attributeEntryToDays(
+      { startedAt: '2026-11-18T01:00:00.000Z', endedAt: '2026-11-18T02:00:00.000Z', elapsedSeconds: 0 },
+      [{ startedAt: '2026-11-18T01:00:00.000Z', endedAt: '2026-11-18T02:00:00.000Z', seconds: 3600 }],
+      'Asia/Shanghai'
+    )
+    expect(slices).toEqual([])
+  })
 })
 
 describe('attributeEntryToDays：老记录（无片段）', () => {

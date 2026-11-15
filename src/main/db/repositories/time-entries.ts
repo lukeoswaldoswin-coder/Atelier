@@ -1,11 +1,13 @@
 import {
   timeEntrySchema,
+  timeSegmentSchema,
   type CommissionStatus,
   type TaskStage,
   type TaskStatus,
   type TimeEntry,
   type TimeEntryView,
-  type TimeListInput
+  type TimeListInput,
+  type TimeSegment
 } from '@shared/domain'
 import type { AppDatabase } from '../database'
 
@@ -21,6 +23,22 @@ export interface NewTimeEntry {
   appKey: string | null
   note: string | null
   clockSkewSeconds?: number | null
+}
+
+/**
+ * 新增活跃片段。
+ *
+ * 片段只是工时记录的「明细」：权威总时长仍然是 time_entries.elapsed_seconds。
+ * id 由调用方生成，因此每条片段只写一次；重复调用不会合并，也不会覆盖既有片段。
+ */
+export interface NewTimeSegment {
+  id: string
+  entryId: string
+  startedAt: string
+  endedAt: string
+  seconds: number
+  createdAt: string
+  updatedAt: string
 }
 
 export interface TaskContext {
@@ -72,6 +90,14 @@ export interface TimeEntriesRepository {
   sumByTask(taskIds: readonly string[]): Map<string, number>
   taskContext(taskId: string): TaskContext | null
   transaction<T>(fn: () => T): T
+
+  // ---- 活跃片段明细（P6.7）----
+  /** 追加一条活跃片段（seconds 必须 > 0，调用方负责过滤空片段） */
+  appendSegment(input: NewTimeSegment): TimeSegment
+  /** 某条工时记录的全部片段，按开始时间升序 */
+  listSegments(entryId: string): TimeSegment[]
+  /** 按片段开始时间范围取出多条记录的片段，按 entryId 分组 */
+  listSegmentsForRange(fromIso: string, toIso: string): Map<string, TimeSegment[]>
 }
 
 const COLUMNS = [
@@ -107,6 +133,16 @@ const VIEW_JOINS = `
   LEFT JOIN commissions c ON c.id = t.commission_id
   LEFT JOIN clients cl ON cl.id = c.client_id
 `
+
+const SEGMENT_COLUMNS = [
+  's.id',
+  's.entry_id AS entryId',
+  's.started_at AS startedAt',
+  's.ended_at AS endedAt',
+  's.seconds',
+  's.created_at AS createdAt',
+  's.updated_at AS updatedAt'
+].join(', ')
 
 function toNumber(value: unknown): number {
   return typeof value === 'number' ? value : Number(value)
@@ -162,6 +198,18 @@ function rowToView(row: Record<string, unknown>): TimeEntryView {
         ? { id: commissionId, title: commissionTitle, clientName: clientName ?? '未知客户' }
         : null
   }
+}
+
+function rowToSegment(row: Record<string, unknown>): TimeSegment {
+  return timeSegmentSchema.parse({
+    id: toText(row['id']),
+    entryId: toText(row['entryId']),
+    startedAt: toText(row['startedAt']),
+    endedAt: toText(row['endedAt']),
+    seconds: toNumber(row['seconds']),
+    createdAt: toText(row['createdAt']),
+    updatedAt: toText(row['updatedAt'])
+  })
 }
 
 export function createTimeEntriesRepository(db: AppDatabase): TimeEntriesRepository {
@@ -410,6 +458,72 @@ export function createTimeEntriesRepository(db: AppDatabase): TimeEntriesReposit
 
     transaction<T>(fn: () => T): T {
       return db.transaction(fn)()
+    },
+
+    // ---- 活跃片段明细（P6.7）----
+
+    appendSegment(input: NewTimeSegment): TimeSegment {
+      if (!Number.isInteger(input.seconds) || input.seconds < 0) {
+        throw new Error('片段秒数必须是非负整数')
+      }
+      db.prepare(
+        `INSERT INTO time_entry_segments (
+           id, entry_id, started_at, ended_at, seconds, created_at, updated_at
+         ) VALUES (
+           @id, @entryId, @startedAt, @endedAt, @seconds, @createdAt, @updatedAt
+         )`
+      ).run({
+        id: input.id,
+        entryId: input.entryId,
+        startedAt: input.startedAt,
+        endedAt: input.endedAt,
+        seconds: input.seconds,
+        createdAt: input.createdAt,
+        updatedAt: input.updatedAt
+      })
+
+      const row = db
+        .prepare(`SELECT ${SEGMENT_COLUMNS} FROM time_entry_segments s WHERE s.id = ?`)
+        .get(input.id) as Record<string, unknown> | undefined
+      if (!row) throw new Error('片段写入后无法读回')
+      return rowToSegment(row)
+    },
+
+    listSegments(entryId: string): TimeSegment[] {
+      return (
+        db
+          .prepare(
+            `SELECT ${SEGMENT_COLUMNS} FROM time_entry_segments s
+              WHERE s.entry_id = ?
+              ORDER BY s.started_at ASC, s.id ASC`
+          )
+          .all(entryId) as Array<Record<string, unknown>>
+      ).map(rowToSegment)
+    },
+
+    /**
+     * 按「片段开始时间」落在 [fromIso, toIso) 内取出多条记录的片段。
+     *
+     * 刻意用片段自身的开始时间过滤，而不是工时记录的开始时间：
+     * 跨午夜的记录，第二天那一段属于第二天的范围。
+     */
+    listSegmentsForRange(fromIso: string, toIso: string): Map<string, TimeSegment[]> {
+      const rows = db
+        .prepare(
+          `SELECT ${SEGMENT_COLUMNS} FROM time_entry_segments s
+            WHERE s.started_at >= @from AND s.started_at < @to
+            ORDER BY s.entry_id ASC, s.started_at ASC, s.id ASC`
+        )
+        .all({ from: fromIso, to: toIso }) as Array<Record<string, unknown>>
+
+      const grouped = new Map<string, TimeSegment[]>()
+      for (const row of rows) {
+        const segment = rowToSegment(row)
+        const bucket = grouped.get(segment.entryId)
+        if (bucket) bucket.push(segment)
+        else grouped.set(segment.entryId, [segment])
+      }
+      return grouped
     }
   }
 }

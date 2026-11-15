@@ -202,14 +202,16 @@ describe('主进程启动流程', () => {
       'commissions',
       'schema_migrations',
       'tasks',
-      'time_entries'
+      'time_entries',
+      'time_entry_segments'
     ])
     expect(migrations.map((row) => row.id)).toEqual([
       '001-initial',
       '002-deadline-and-payment',
       '003-tasks',
     '004-task-planned-date',
-      '005-time-entries'
+      '005-time-entries',
+      '006-time-entry-segments'
     ])
 
     // 数据相关通道均已注册

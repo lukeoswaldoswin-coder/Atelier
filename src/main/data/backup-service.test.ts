@@ -38,13 +38,13 @@ describe('数据备份服务', () => {
 
     expect(backup.fileName).toMatch(/^Atelier-backup-\d{8}-\d{6}-\d{3}\.db$/)
     expect(backup.kind).toBe('manual')
-    expect(backup.schemaVersion).toBe('005-time-entries')
+    expect(backup.schemaVersion).toBe('006-time-entry-segments')
     expect(existsSync(backup.path)).toBe(true)
     expect(backup.sizeBytes).toBeGreaterThan(0)
 
     const validation = validateDatabaseFile(backup.path, { requireNoSidecars: true })
     expect(validation.ok).toBe(true)
-    expect(validation.appliedMigrations).toContain('005-time-entries')
+    expect(validation.appliedMigrations).toContain('006-time-entry-segments')
 
     const copy = createDatabaseService(backup.path)
     expect(createClientsRepository(copy.db).list({ includeArchived: true })).toHaveLength(1)
@@ -128,12 +128,13 @@ describe('数据备份服务', () => {
   it('允许但标记较旧 schema，strict 模式拒绝', () => {
     const backup = service().createManual()
     const copy = createDatabaseService(backup.path)
-    copy.db.prepare("DELETE FROM schema_migrations WHERE id = '005-time-entries'").run()
+    // 删掉最新一条迁移，模拟「比当前应用旧的库」
+    copy.db.prepare("DELETE FROM schema_migrations WHERE id = '006-time-entry-segments'").run()
     copy.close()
 
     const lenient = validateDatabaseFile(backup.path, { requireNoSidecars: true, allowOlder: true })
     expect(lenient.ok).toBe(true)
-    expect(lenient.schemaVersion).toBe('004-task-planned-date')
+    expect(lenient.schemaVersion).toBe('005-time-entries')
 
     const strict = validateDatabaseFile(backup.path, { requireNoSidecars: true, allowOlder: false })
     expect(strict.ok).toBe(false)

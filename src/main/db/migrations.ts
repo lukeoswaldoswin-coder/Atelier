@@ -406,5 +406,28 @@ export const MIGRATIONS: readonly Migration[] = [
 
       assertNoForeignKeyViolations(db, '迁移 005')
     }
+  },
+  {
+    id: '006-time-entry-segments',
+    name: '工时活跃片段明细表',
+    run(db: AppDatabase): void {
+      // 只新增明细表，不回填、不修改任何既有数据：
+      // 老记录没有片段，由应用层（shared/calendar-activity）按老记录规则尽力还原。
+      db.exec(`
+        CREATE TABLE time_entry_segments (
+          id         TEXT PRIMARY KEY NOT NULL,
+          entry_id   TEXT NOT NULL REFERENCES time_entries (id) ON UPDATE CASCADE ON DELETE CASCADE,
+          started_at TEXT NOT NULL CHECK (started_at GLOB ${UTC_GLOB}),
+          ended_at   TEXT NOT NULL CHECK (ended_at GLOB ${UTC_GLOB}),
+          seconds    INTEGER NOT NULL CHECK (typeof(seconds) = 'integer' AND seconds >= 0),
+          created_at TEXT NOT NULL CHECK (created_at GLOB ${UTC_GLOB}),
+          updated_at TEXT NOT NULL CHECK (updated_at GLOB ${UTC_GLOB})
+        );
+
+        CREATE INDEX idx_time_entry_segments_entry ON time_entry_segments (entry_id, started_at);
+      `)
+
+      assertNoForeignKeyViolations(db, '迁移 006')
+    }
   }
 ]

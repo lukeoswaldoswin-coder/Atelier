@@ -30,6 +30,8 @@ interface ManualState {
   taskId: string
   accumulatedSeconds: number
   runStartedMono: number | null
+  /** 当前运行区间的墙钟起点；null = 当前没有在累计（暂停中） */
+  runStartedWall: number | null
   status: 'running' | 'paused'
   lastCheckpointMono: number
 }
@@ -49,6 +51,8 @@ interface TaskSessionState {
   accumulatedSeconds: number
   /** 当前活跃片段开始时的单调时钟；null = 当前没有在累计 */
   segmentStartedMono: number | null
+  /** 当前活跃片段开始时的墙钟时间；用于落 time_entry_segments 的真实起止 */
+  segmentStartedWall: number | null
   /** 用户手动暂停：不再累计，但会话保持 */
   manualPaused: boolean
   /** 最近一次活跃判定的应用 key */
@@ -136,6 +140,7 @@ export function createTimeService(
       taskId: recoveredManual.taskId as string,
       accumulatedSeconds: recoveredManual.elapsedSeconds,
       runStartedMono: null,
+      runStartedWall: null,
       status: 'paused',
       lastCheckpointMono: clock.monotonicMs()
     }
@@ -152,6 +157,7 @@ export function createTimeService(
       accumulatedSeconds: recoveredTaskSession.elapsedSeconds,
       // 重启后不能把停机时间算进去，从「未累计」状态等下一次活跃判定
       segmentStartedMono: null,
+      segmentStartedWall: null,
       manualPaused: false,
       activeAppKey: null,
       startedAtWall: Date.parse(recoveredTaskSession.startedAt),
@@ -182,6 +188,31 @@ export function createTimeService(
       note: '异常退出，已按检查点结算',
       updatedAt: iso(clock.wallMs())
     })
+  }
+
+  /**
+   * 落一条活跃片段明细。
+   *
+   * 只有 seconds > 0 才写：0 秒片段既没有信息量，也会让「片段合计 == elapsed」的
+   * 校验多出噪声。写片段绝不修改 elapsed_seconds。
+   */
+  function recordSegment(entryId: string, startedWall: number, endedWall: number, seconds: number): void {
+    if (seconds <= 0) return
+    const now = iso(clock.wallMs())
+    try {
+      repo.appendSegment({
+        id: randomUUID(),
+        entryId,
+        startedAt: iso(startedWall),
+        endedAt: iso(endedWall),
+        seconds,
+        createdAt: now,
+        updatedAt: now
+      })
+    } catch (error) {
+      // 明细失败不能影响用户的实际计时与总时长
+      console.warn('[time-service] 写入活跃片段失败，已忽略：', error)
+    }
   }
 
   function currentElapsedSeconds(): number {
@@ -239,11 +270,23 @@ export function createTimeService(
   /** 把当前活跃片段结算进累计值（不写库），并清空片段起点。 */
   function closeActiveSegment(): void {
     if (!taskSession || taskSession.segmentStartedMono === null) return
+    const entryId = taskSession.entryId
+    const startedWall = taskSession.segmentStartedWall ?? clock.wallMs()
+    const endedWall = clock.wallMs()
+    const delta = Math.max(
+      0,
+      Math.floor((clock.monotonicMs() - taskSession.segmentStartedMono) / 1000)
+    )
+
     taskSession = {
       ...taskSession,
-      accumulatedSeconds: currentSessionAccumulated(),
-      segmentStartedMono: null
+      accumulatedSeconds: taskSession.accumulatedSeconds + delta,
+      segmentStartedMono: null,
+      segmentStartedWall: null
     }
+
+    // 明细：真实墙钟起止 + 本段秒数；elapsed_seconds 仍是权威总时长，不参与二次计算
+    recordSegment(entryId, startedWall, endedWall, delta)
   }
 
   /**
@@ -355,6 +398,7 @@ export function createTimeService(
       taskId,
       accumulatedSeconds: 0,
       runStartedMono: nowMono,
+      runStartedWall: clock.wallMs(),
       status: 'running',
       lastCheckpointMono: nowMono
     }
@@ -371,11 +415,19 @@ export function createTimeService(
     const nowMono = clock.monotonicMs()
 
     repo.setStatus(manual.entryId, 'paused', elapsed, nowWall, nowWall)
+    // 明细：把刚结算的这一段活跃区间落库（暂停期间不再产生片段）
+    recordSegment(
+      manual.entryId,
+      manual.runStartedWall ?? Date.parse(nowWall),
+      Date.parse(nowWall),
+      Math.max(0, elapsed - manual.accumulatedSeconds)
+    )
     manual = {
       ...manual,
       status: 'paused',
       accumulatedSeconds: elapsed,
       runStartedMono: null,
+      runStartedWall: null,
       lastCheckpointMono: nowMono
     }
     notice = null
@@ -394,6 +446,7 @@ export function createTimeService(
       ...manual,
       status: 'running',
       runStartedMono: nowMono,
+      runStartedWall: clock.wallMs(),
       lastCheckpointMono: nowMono
     }
     notice = null
@@ -407,6 +460,17 @@ export function createTimeService(
     const startedAt = repo.get(manual.entryId)?.startedAt
 
     if (!startedAt) throw new Error('计时记录丢失')
+
+    // 明细：运行中才有「当前活跃区间」，暂停时最后一段已在 pause 落库
+    if (manual.status === 'running' && manual.runStartedWall !== null) {
+      recordSegment(
+        manual.entryId,
+        manual.runStartedWall,
+        Date.parse(endedAt),
+        Math.max(0, elapsed - manual.accumulatedSeconds)
+      )
+    }
+
     repo.finalize({
       id: manual.entryId,
       endedAt,
@@ -483,6 +547,7 @@ export function createTimeService(
       accumulatedSeconds: 0,
       // 先不累计，等监测确认绘画软件活跃后才开始计时
       segmentStartedMono: null,
+      segmentStartedWall: null,
       manualPaused: false,
       activeAppKey: null,
       startedAtWall: clock.wallMs(),
@@ -516,6 +581,7 @@ export function createTimeService(
       ...taskSession,
       manualPaused: false,
       segmentStartedMono: null,
+      segmentStartedWall: null,
       lastCheckpointMono: clock.monotonicMs()
     }
     return status()
@@ -551,6 +617,7 @@ export function createTimeService(
       taskSession = {
         ...taskSession,
         segmentStartedMono: clock.monotonicMs(),
+        segmentStartedWall: clock.wallMs(),
         activeAppKey: appKey,
         lastCheckpointMono: clock.monotonicMs()
       }
@@ -585,11 +652,19 @@ export function createTimeService(
         nowWall,
         '计时超过 24 小时，已自动暂停'
       )
+      // 明细：自动暂停同样是「结算出一段活跃时间」，必须落片段
+      recordSegment(
+        manual.entryId,
+        manual.runStartedWall ?? Date.parse(nowWall),
+        Date.parse(nowWall),
+        Math.max(0, elapsed - manual.accumulatedSeconds)
+      )
       manual = {
         ...manual,
         status: 'paused',
         accumulatedSeconds: elapsed,
         runStartedMono: null,
+        runStartedWall: null,
         lastCheckpointMono: clock.monotonicMs()
       }
       notice = '本次计时已超过 24 小时，已自动暂停；请确认后继续或结束。'

@@ -189,6 +189,45 @@ export function attributeEntryToDays(
     slices.push(...splitSegmentByLocalDay(segment.startedAt, segment.endedAt, value, timeZone))
   }
 
+  /**
+   * 片段合计必须与 elapsed_seconds 对齐。
+   *
+   * 片段可能比 elapsed 多：用户手工把工时的起止时间改短（updateCompleted 会重算
+   * elapsed_seconds，但不会同步改写历史片段）。此时若直接采用片段，日历会比工时记录页
+   * 多算，造成同一笔工时重复累计。
+   *
+   * 处理原则：elapsed_seconds 始终是权威值。多出时按比例缩放各片段，
+   * 保持相对分布不变，并把余数补给最长的那一天，保证合计严格等于 elapsed。
+   */
+  if (covered > elapsed) {
+    if (elapsed <= 0) return []
+
+    const scaled: DaySlice[] = []
+    let assigned = 0
+    let largestIndex = 0
+
+    for (const slice of slices) {
+      const value = Math.floor((slice.seconds * elapsed) / covered)
+      if (value > (scaled[largestIndex]?.seconds ?? -1)) largestIndex = scaled.length
+      assigned += value
+      if (value > 0) scaled.push({ date: slice.date, seconds: value })
+    }
+
+    const deficit = elapsed - assigned
+    if (deficit > 0) {
+      if (scaled.length === 0) {
+        const startMs = Date.parse(entry.startedAt)
+        const fallbackMs = Number.isFinite(startMs) ? startMs : Date.now()
+        return [{ date: localDayOf(fallbackMs, timeZone), seconds: elapsed }]
+      }
+      const target = Math.min(largestIndex, scaled.length - 1)
+      const item = scaled[target] as DaySlice
+      scaled[target] = { date: item.date, seconds: item.seconds + deficit }
+    }
+
+    return scaled
+  }
+
   const remainder = elapsed - covered
   if (remainder > 0) {
     const startMs = Date.parse(entry.startedAt)
