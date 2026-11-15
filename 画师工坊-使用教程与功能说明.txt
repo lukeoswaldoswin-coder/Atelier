@@ -1,5 +1,5 @@
 画师工坊 使用教程与功能说明
-版本：0.1.0
+版本：0.1.1
 适用范围：Windows
 数据模式：本地 SQLite，不上传云端
 
@@ -11,13 +11,13 @@
 
 最终安装包位于：
 
-C:\Users\11415\AppData\Local\Atelier\release\画师工坊-Setup-0.1.0.exe
+C:\Users\11415\AppData\Local\Atelier\release\画师工坊-Setup-0.1.1.exe
 
 也可以按 Win + R，输入：
 
 %LOCALAPPDATA%\Atelier\release
 
-然后运行 画师工坊-Setup-0.1.0.exe。
+然后运行 画师工坊-Setup-0.1.1.exe。
 
 2. 安装说明
 

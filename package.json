@@ -1,6 +1,6 @@
 {
     "name":  "atelier",
-    "version":  "0.1.0",
+    "version":  "0.1.1",
     "private":  true,
     "description":  "画师工坊（Atelier）- 画师委托与创作管理工具",
     "author":  "Atelier",
