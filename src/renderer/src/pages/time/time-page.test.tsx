@@ -298,6 +298,9 @@ describe('工时记录批量选择', () => {
     await waitFor(() =>
       expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ filter: 'all' }))
     )
+    // 切回全部后仍是全选状态，先取消再重新全选
+    await user.click(screen.getByRole('button', { name: '取消全选' }))
+    expect(checkedIds(allRows)).toEqual([])
     await user.click(screen.getByRole('button', { name: '全选未分配' }))
     expect(checkedIds(allRows)).toEqual([autoEntry.entry.id, unassignedAuto2.entry.id])
   })
@@ -442,5 +445,176 @@ describe('工时记录批量选择', () => {
     fireEvent.pointerMove(window, { clientX: 200, clientY: 60, buttons: 0 })
     expect(screen.queryByTestId('marquee-box')).not.toBeInTheDocument()
     expect(checkedIds(allRows)).toEqual([autoEntry.entry.id])
+  })
+
+  it('从时间文字上按下并拖动可以启动框选', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    stubRowRects()
+
+    const rows = screen.getAllByTestId('time-entry') as HTMLElement[]
+    // 时间文字（如 "09:00 – 09:05"）所在的 span
+    const timeText = within(rows[0] as HTMLElement).getByText(/\d{2}:\d{2}/)
+    fireEvent.pointerDown(timeText, { button: 0, clientX: 10, clientY: 5 })
+    fireEvent.pointerMove(window, { clientX: 200, clientY: 60, buttons: 1 })
+
+    expect(screen.getByTestId('marquee-box')).toBeInTheDocument()
+    fireEvent.pointerUp(window, { clientX: 200, clientY: 60 })
+    expect(checkedIds(allRows)).toEqual([autoEntry.entry.id])
+  })
+
+  it('从工时长度文字上按下并拖动可以启动框选', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    stubRowRects()
+
+    const rows = screen.getAllByTestId('time-entry') as HTMLElement[]
+    // 工时长度文字（如 "10 分钟"）
+    const durationText = within(rows[0] as HTMLElement).getByText(/^\d+ 分钟$/)
+    fireEvent.pointerDown(durationText, { button: 0, clientX: 10, clientY: 5 })
+    fireEvent.pointerMove(window, { clientX: 200, clientY: 60, buttons: 1 })
+
+    expect(screen.getByTestId('marquee-box')).toBeInTheDocument()
+    fireEvent.pointerUp(window, { clientX: 200, clientY: 60 })
+    expect(checkedIds(allRows)).toEqual([autoEntry.entry.id])
+  })
+
+  it('从记录卡片内的普通文本按下并拖动可以启动框选', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    stubRowRects()
+
+    const rows = screen.getAllByTestId('time-entry') as HTMLElement[]
+    const noteText = within(rows[1] as HTMLElement).getAllByText('未分配')[0] as HTMLElement
+    fireEvent.pointerDown(noteText, { button: 0, clientX: 10, clientY: 55 })
+    fireEvent.pointerMove(window, { clientX: 200, clientY: 100, buttons: 1 })
+
+    expect(screen.getByTestId('marquee-box')).toBeInTheDocument()
+    fireEvent.pointerUp(window, { clientX: 200, clientY: 100 })
+    expect(checkedIds(allRows)).toEqual([autoEntry.entry.id, unassignedAuto2.entry.id])
+  })
+
+  it('列表区域禁用文本选择，避免拖拽时选中文字', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    expect(screen.getByTestId('time-list').className).toContain('select-none')
+  })
+
+  it('全选按钮第一次点击全选，第二次点击取消全部选择', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    const user = userEvent.setup()
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+
+    // 状态 A：显示「全选未分配」
+    await user.click(screen.getByRole('button', { name: '全选未分配' }))
+    expect(checkedIds(allRows)).toEqual([autoEntry.entry.id, unassignedAuto2.entry.id])
+
+    // 状态 B：已全部选中，按钮变「取消全选」
+    await user.click(screen.getByRole('button', { name: '取消全选' }))
+    expect(checkedIds(allRows)).toEqual([])
+    expect(screen.getByRole('button', { name: '全选未分配' })).toBeInTheDocument()
+  })
+
+  it('部分选中时按钮仍显示「全选未分配」', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    const user = userEvent.setup()
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    const boxes = checkboxes()
+    await user.click(boxes[1] as HTMLElement)
+
+    expect(screen.getByRole('button', { name: '全选未分配' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '取消全选' })).not.toBeInTheDocument()
+  })
+
+  it('已归属记录不参与全选判定，按钮状态只看未分配记录', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    const user = userEvent.setup()
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    // 手动勾上一条已归属记录，未分配仍未全选
+    const rows = screen.getAllByTestId('time-entry') as HTMLElement[]
+    await user.click(within(rows[0] as HTMLElement).getByLabelText('选择工时记录'))
+    expect(screen.getByRole('button', { name: '全选未分配' })).toBeInTheDocument()
+  })
+
+  it('切换筛选后按钮状态按当前结果重新计算', async () => {
+    const unassignedOnly = [autoEntry, unassignedAuto2]
+    const list = vi.fn(async (input: { filter: string }) =>
+      input.filter === 'unassigned' ? unassignedOnly : allRows
+    )
+    installApi({ list })
+    const user = userEvent.setup()
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    await user.click(screen.getByRole('button', { name: '全选未分配' }))
+    expect(screen.getByRole('button', { name: '取消全选' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: '未分配' }))
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ filter: 'unassigned' }))
+    )
+    // 当前筛选结果仍全部选中
+    expect(screen.getByRole('button', { name: '取消全选' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '取消全选' }))
+    expect(checkedIds(unassignedOnly)).toEqual([])
+    expect(screen.getByRole('button', { name: '全选未分配' })).toBeInTheDocument()
+  })
+
+  it('切换日期范围后按钮状态正确', async () => {
+    let empty = false
+    const list = vi.fn(async () => (empty ? [] : allRows))
+    installApi({ list })
+    const user = userEvent.setup()
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    await user.click(screen.getByRole('button', { name: '全选未分配' }))
+    expect(screen.getByRole('button', { name: '取消全选' })).toBeInTheDocument()
+
+    empty = true
+    fireEvent.change(screen.getByLabelText('开始日期'), { target: { value: '2026-11-15' } })
+    await waitFor(() => expect(screen.getByRole('button', { name: '全选未分配' })).toBeDisabled())
+  })
+
+  it('取消全选会清空全部选择，包括手动勾选的已归属记录', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    const user = userEvent.setup()
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    await user.click(screen.getByRole('button', { name: '全选未分配' }))
+    // 再手动勾上一条已归属记录
+    const rows = screen.getAllByTestId('time-entry') as HTMLElement[]
+    await user.click(within(rows[0] as HTMLElement).getByLabelText('选择工时记录'))
+    expect(checkedIds(allRows)).toHaveLength(3)
+
+    await user.click(screen.getByRole('button', { name: '取消全选' }))
+    expect(checkedIds(allRows)).toEqual([])
+  })
+
+  it('全选按钮使用主色调样式，尺寸大于次要按钮', async () => {
+    installApi({ list: vi.fn(async () => allRows) })
+    render(<TimePage today="2026-11-14" />)
+
+    await screen.findAllByTestId('time-entry')
+    const selectAll = screen.getByRole('button', { name: '全选未分配' })
+    expect(selectAll.className).toContain('bg-primary')
+    expect(selectAll.className).toContain('h-9')
+    expect(selectAll.className).not.toContain('border border-input')
   })
 })

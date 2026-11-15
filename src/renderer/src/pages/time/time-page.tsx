@@ -125,6 +125,9 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
         .map((entry) => entry.entry.id),
     [entries.rows]
   )
+  /** 当前查询范围内的未分配记录是否已全部选中（决定按钮显示「全选未分配」还是「取消全选」）。 */
+  const allUnassignedSelected =
+    unassignedIds.length > 0 && unassignedIds.every((id) => selected.has(id))
   const canMerge =
     selectedEntries.length >= 2 &&
     selectedEntries.every(
@@ -143,9 +146,10 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
     })
   }, [entries.rows])
 
-  /** 一键全选当前查询范围内的未分配记录。 */
-  function selectUnassigned(): void {
-    setSelected(new Set(unassignedIds))
+  /** 一键全选当前查询范围内的未分配记录；已全选时再次点击清空全部选择。 */
+  function toggleSelectUnassigned(): void {
+    if (allUnassignedSelected) setSelected(new Set())
+    else setSelected(new Set(unassignedIds))
   }
 
   function toggleSelected(id: string): void {
@@ -302,12 +306,12 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
         <div className="flex items-center gap-2">
           <Button
             type="button"
-            variant="outline"
-            size="sm"
+            size="default"
+            className="h-9 px-4 font-medium"
             disabled={unassignedIds.length === 0}
-            onClick={selectUnassigned}
+            onClick={toggleSelectUnassigned}
           >
-            全选未分配
+            {allUnassignedSelected ? '取消全选' : '全选未分配'}
           </Button>
           <span className="text-xs text-muted-foreground" data-testid="time-total">
             {summary ? `实际 ${formatDuration(summary.totalSeconds)}` : '统计中…'}
@@ -358,7 +362,7 @@ export function TimePage({ today: todayProp }: TimePageProps = {}) {
           ref={listRef}
           data-testid="time-list"
           onPointerDown={startMarquee}
-          className={cn('flex flex-col gap-3', dragging && 'cursor-crosshair select-none')}
+          className={cn('flex flex-col gap-3 select-none', dragging && 'cursor-crosshair')}
         >
           {groups.map(([date, rows]) => (
             <section key={date} className="flex flex-col gap-1">
