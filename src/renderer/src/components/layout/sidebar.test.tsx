@@ -13,7 +13,7 @@ describe('侧边栏', () => {
   it('显示全部导航项与品牌名', () => {
     render(<Sidebar />)
 
-    expect(screen.getByText('Atelier')).toBeInTheDocument()
+    expect(screen.getByText('画师工坊')).toBeInTheDocument()
     for (const item of navItems) {
       expect(screen.getByRole('button', { name: new RegExp(item.label) })).toBeInTheDocument()
     }

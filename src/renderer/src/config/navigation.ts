@@ -4,11 +4,18 @@ import {
   Settings,
   Timer,
   Users,
+  Wand2,
   type LucideIcon
 } from 'lucide-react'
 
 /** 侧边栏路由标识。新增页面时必须在这里登记，App 才能渲染对应内容。 */
-export type RouteId = 'dashboard' | 'commissions' | 'calendar' | 'time' | 'settings'
+export type RouteId =
+  | 'dashboard'
+  | 'commissions'
+  | 'tasks'
+  | 'calendar'
+  | 'time'
+  | 'settings'
 
 export interface NavItem {
   id: RouteId
@@ -51,6 +58,14 @@ export const navGroups: readonly NavGroup[] = [
         description: '客户资料、需求说明、交稿日期、金额与付款状态。',
         icon: Users,
         phase: 'P1.2',
+        implemented: true
+      },
+      {
+        id: 'tasks',
+        label: '绘画任务',
+        description: '集中管理创作任务，直接开始计时。',
+        icon: Wand2,
+        phase: 'P6.6',
         implemented: true
       }
     ]

@@ -33,3 +33,38 @@ export function useLiveElapsedSeconds(): number {
   const drift = fetchedAt > 0 ? Math.max(0, Math.floor((Date.now() - fetchedAt) / 1000)) : 0
   return entry.elapsedSeconds + drift
 }
+
+/**
+ * 任务计时会话的实时秒数。
+ *
+ * 两个数字必须区分：
+ * - accumulated：实际累计工时，只在 accumulating 时按本地时间平滑递增；
+ * - session：会话持续时间（墙钟），从会话开始一直走。
+ */
+export function useLiveTaskSession(): {
+  accumulated: number
+  session: number
+  accumulating: boolean
+} {
+  const status = useTimeStore((state) => state.status)
+  const fetchedAt = useTimeStore((state) => state.fetchedAt)
+  const [, setTick] = useState(0)
+
+  const taskSession = status?.taskSession ?? null
+  const accumulating = taskSession?.accumulating ?? false
+
+  useEffect(() => {
+    if (!taskSession) return
+    const timer = setInterval(() => setTick((value) => value + 1), 1000)
+    return () => clearInterval(timer)
+  }, [taskSession?.entry.entry.id, accumulating])
+
+  if (!taskSession) return { accumulated: 0, session: 0, accumulating: false }
+
+  const drift = fetchedAt > 0 ? Math.max(0, Math.floor((Date.now() - fetchedAt) / 1000)) : 0
+  return {
+    accumulated: taskSession.accumulatedSeconds + (accumulating ? drift : 0),
+    session: taskSession.sessionSeconds + drift,
+    accumulating
+  }
+}

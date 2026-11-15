@@ -1,10 +1,10 @@
 import { create } from 'zustand'
-import type { TimeStatusOutput } from '@shared/domain'
+import type { TimeStatusView } from '@shared/domain'
 import { getAtelierApi } from '@/lib/ipc'
 import { formatIpcError } from '@/lib/ipc-error'
 
 interface TimeState {
-  status: TimeStatusOutput | null
+  status: TimeStatusView | null
   /** 最近一次从主进程同步的时间（用于本地平滑计时） */
   fetchedAt: number
   error: string | null
@@ -16,10 +16,16 @@ interface TimeState {
   pause: () => Promise<void>
   resume: () => Promise<void>
   stop: () => Promise<void>
+
+  /** 任务计时会话（P6.6） */
+  startTask: (taskId: string, replaceCurrent?: boolean) => Promise<void>
+  pauseTask: () => Promise<void>
+  resumeTask: () => Promise<void>
+  stopTask: () => Promise<void>
 }
 
 export const useTimeStore = create<TimeState>((set, get) => {
-  async function run(action: () => Promise<TimeStatusOutput>): Promise<void> {
+  async function run(action: () => Promise<TimeStatusView>): Promise<void> {
     set({ busy: true, error: null })
     try {
       const status = await action()
@@ -53,6 +59,12 @@ export const useTimeStore = create<TimeState>((set, get) => {
     start: (taskId) => run(() => getAtelierApi().time.start({ taskId })),
     pause: () => run(() => getAtelierApi().time.pause()),
     resume: () => run(() => getAtelierApi().time.resume()),
-    stop: () => run(() => getAtelierApi().time.stop())
+    stop: () => run(() => getAtelierApi().time.stop()),
+
+    startTask: (taskId, replaceCurrent = false) =>
+      run(() => getAtelierApi().time.startTask({ taskId, replaceCurrent })),
+    pauseTask: () => run(() => getAtelierApi().time.pauseTask()),
+    resumeTask: () => run(() => getAtelierApi().time.resumeTask()),
+    stopTask: () => run(() => getAtelierApi().time.stopTask())
   }
 })

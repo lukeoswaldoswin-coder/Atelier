@@ -109,4 +109,82 @@ describe('顶栏计时指示器', () => {
     const { container } = render(<TimeIndicator />)
     expect(container).toBeEmptyDOMElement()
   })
+
+  it('任务计时会话显示任务名、累计时间与活跃状态', () => {
+    const stopTask = vi.fn(async () => ({
+      manual: null,
+      auto: null,
+      notice: null,
+      taskSession: null
+    }))
+    Object.defineProperty(window, 'atelier', {
+      configurable: true,
+      value: { time: { stopTask } }
+    })
+
+    useTimeStore.setState({
+      status: {
+        manual: null,
+        auto: null,
+        notice: null,
+        taskSession: {
+          entry: {
+            ...manualStatus.manual!,
+            entry: {
+              ...manualStatus.manual!.entry,
+              source: 'auto',
+              taskId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+            }
+          },
+          taskId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          state: 'running',
+          accumulating: true,
+          activeAppKey: 'photoshop',
+          accumulatedSeconds: 125,
+          sessionSeconds: 600,
+          startedAt: '2026-11-14T02:00:00.000Z'
+        }
+      },
+      fetchedAt: Date.now()
+    })
+
+    render(<TimeIndicator />)
+
+    const indicator = screen.getByTestId('task-indicator')
+    expect(indicator).toHaveTextContent('构图草稿')
+    expect(screen.getByTestId('task-indicator-elapsed')).toHaveTextContent('00:02:05')
+    // 累计 2 分 05 秒，而会话已持续 10 分钟，两者必须区分
+    expect(screen.getByRole('button', { name: '暂停' })).toBeInTheDocument()
+  })
+
+  it('任务计时手动暂停时显示继续按钮', () => {
+    useTimeStore.setState({
+      status: {
+        manual: null,
+        auto: null,
+        notice: null,
+        taskSession: {
+          entry: {
+            ...manualStatus.manual!,
+            entry: {
+              ...manualStatus.manual!.entry,
+              source: 'auto',
+              taskId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+            }
+          },
+          taskId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          state: 'paused',
+          accumulating: false,
+          activeAppKey: null,
+          accumulatedSeconds: 60,
+          sessionSeconds: 300,
+          startedAt: '2026-11-14T02:00:00.000Z'
+        }
+      },
+      fetchedAt: Date.now()
+    })
+
+    render(<TimeIndicator />)
+    expect(screen.getByRole('button', { name: '继续' })).toBeInTheDocument()
+  })
 })
